@@ -45,23 +45,27 @@ abstract final class RecordoTheme {
 }
 
 abstract final class RType {
+  /// Display / sheet titles — enough height so Syne descenders (g y p) don’t clip.
   static TextStyle display() => GoogleFonts.syne(
         fontSize: 28,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.8,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.4,
+        height: 1.25,
         color: UberColors.white,
       );
 
   static TextStyle title() => GoogleFonts.syne(
         fontSize: 22,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+        height: 1.3,
         color: UberColors.white,
       );
 
   static TextStyle titleSm() => GoogleFonts.plusJakartaSans(
         fontSize: 17,
         fontWeight: FontWeight.w700,
+        height: 1.3,
         color: UberColors.white,
       );
 
@@ -69,12 +73,13 @@ abstract final class RType {
         fontSize: 15,
         fontWeight: FontWeight.w500,
         color: UberColors.white,
-        height: 1.35,
+        height: 1.4,
       );
 
   static TextStyle muted() => GoogleFonts.plusJakartaSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
+        height: 1.35,
         color: UberColors.muted,
       );
 
@@ -82,6 +87,7 @@ abstract final class RType {
         fontSize: 12,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.2,
+        height: 1.3,
         color: UberColors.muted,
       );
 }
