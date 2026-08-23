@@ -58,7 +58,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Community price', style: RType.label()),
+                    Text('司機報價', style: RType.label()),
                     const SizedBox(height: 8),
                     Text(p.priceSummary, style: RType.display()),
                     const SizedBox(height: 6),
@@ -72,8 +72,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Prices are UGC — not Google, not operators. '
-                'Confirm or fix so the next driver trusts Recordo.',
+                '價錢由用家更新，唔係 Google 或場方。'
+                '唔啱可以改。',
                 style: RType.muted(),
               ),
               const SizedBox(height: 20),
@@ -95,20 +95,20 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                     HapticFeedback.lightImpact();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Thanks — price confirmed')),
+                        const SnackBar(content: Text('已確認')),
                       );
                     }
                   },
-                  child: const Text('Still correct'),
+                  child: const Text('價錢仍然啱'),
                 ),
               const SizedBox(height: 12),
-              Text('Report / fix price', style: RType.titleSm()),
+              Text('改收費', style: RType.titleSm()),
               const SizedBox(height: 10),
-              _field(_hourly, 'Hourly HK\$'),
+              _field(_hourly, '時租 HK\$'),
               const SizedBox(height: 8),
-              _field(_daily, 'Daily HK\$ (optional)'),
+              _field(_daily, '日泊 HK\$（可空）'),
               const SizedBox(height: 8),
-              _field(_night, 'Night HK\$ (optional)'),
+              _field(_night, '夜泊 HK\$（可空）'),
               const SizedBox(height: 14),
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
@@ -128,12 +128,12 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                   HapticFeedback.mediumImpact();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Price updated for everyone later')),
+                      const SnackBar(content: Text('已更新')),
                     );
                     Navigator.pop(context);
                   }
                 },
-                child: const Text('Submit UGC price'),
+                child: const Text('提交'),
               ),
             ],
           ),
