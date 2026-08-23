@@ -64,10 +64,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('End parking', style: RType.title()),
+                  Text('結束', style: RType.title()),
                   const SizedBox(height: 6),
                   Text(
-                    'Stop safely first. How much did you pay?',
+                    '今次泊咗幾多錢？',
                     style: RType.muted(),
                   ),
                   const SizedBox(height: 16),
@@ -94,13 +94,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        'Update price for ${selected.name}',
+                        '順便更新場價',
                         style: RType.body(),
                       ),
-                      subtitle: Text(
-                        'UGC — helps the next driver',
-                        style: RType.muted(),
-                      ),
+                      subtitle: null,
                       value: updatePrice,
                       activeThumbColor: UberColors.accent,
                       onChanged: (v) => setModal(() => updatePrice = v),
@@ -120,7 +117,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       if (v == null || v < 0) return;
                       Navigator.pop(ctx, true);
                     },
-                    child: const Text('Save trip'),
+                    child: const Text('儲存'),
                   ),
                 ],
               ),
@@ -150,7 +147,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     if (context.mounted) {
       HapticFeedback.lightImpact();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved · thanks for contributing')),
+        const SnackBar(content: Text('已記低')),
       );
     }
   }
@@ -245,8 +242,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 Expanded(
                                   child: Text(
                                     active == null
-                                        ? 'Nearby car parks'
-                                        : 'Parking now',
+                                        ? '附近停車場'
+                                        : '泊緊',
                                     style: RType.title(),
                                     // Syne g/y/p need room; avoid parent clip.
                                     textHeightBehavior:
@@ -258,7 +255,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Month HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                  '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
                                   style: RType.muted(),
                                 ),
                               ],
@@ -297,7 +294,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                             padding: EdgeInsets.fromLTRB(16, 4, 16, 12 + bottom),
                             child: active == null
                                 ? SlideToUnlock(
-                                    label: 'Slide to start parking log',
+                                    label: '右滑開始計時',
                                     accent: UberColors.white,
                                     thumbColor: UberColors.black,
                                     onCompleted: () async {
@@ -310,7 +307,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                     },
                                   )
                                 : SlideToUnlock(
-                                    label: 'Slide to end & enter fee',
+                                    label: '右滑結束 · 填收費',
                                     accent: UberColors.accent,
                                     thumbColor: UberColors.black,
                                     trackColor: const Color(0xFF0A2A1A),
@@ -409,12 +406,12 @@ class _LiveSessionBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('PARKING', style: RType.label().copyWith(
+                Text('計時中', style: RType.label().copyWith(
                   color: UberColors.accent,
                   letterSpacing: 1.2,
                 )),
                 Text(
-                  parkName ?? 'Session running',
+                  parkName ?? '未選場',
                   style: RType.body(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -509,7 +506,7 @@ class _ParkTile extends StatelessWidget {
                 ),
               ),
               if (!park.hasPrice)
-                Text('Add price', style: RType.label().copyWith(
+                Text('未有價', style: RType.label().copyWith(
                   color: UberColors.accent,
                 )),
             ],

@@ -31,19 +31,19 @@ class Park {
       hourlyHkd != null || dailyHkd != null || nightHkd != null;
 
   String get priceSummary {
-    if (hourlyHkd != null) return 'HK\$${hourlyHkd!.toStringAsFixed(0)}/hr';
-    if (dailyHkd != null) return 'HK\$${dailyHkd!.toStringAsFixed(0)}/day';
-    if (nightHkd != null) return 'Night HK\$${nightHkd!.toStringAsFixed(0)}';
-    return 'No price yet';
+    if (hourlyHkd != null) return 'HK\$${hourlyHkd!.toStringAsFixed(0)}/時';
+    if (dailyHkd != null) return 'HK\$${dailyHkd!.toStringAsFixed(0)}/日';
+    if (nightHkd != null) return '夜泊 HK\$${nightHkd!.toStringAsFixed(0)}';
+    return '未有收費';
   }
 
   String get freshnessLabel {
     final t = priceUpdatedAt;
-    if (t == null) return 'Unverified';
+    if (t == null) return '未有人更新';
     final d = DateTime.now().difference(t);
-    if (d.inMinutes < 60) return 'Updated ${d.inMinutes}m ago';
-    if (d.inHours < 48) return 'Updated ${d.inHours}h ago';
-    return 'Updated ${d.inDays}d ago · $ugcConfirms confirms';
+    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前更新';
+    if (d.inHours < 48) return '${d.inHours} 小時前更新';
+    return '${d.inDays} 日前 · $ugcConfirms 人確認';
   }
 
   Park copyWith({

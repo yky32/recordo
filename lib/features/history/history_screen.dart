@@ -13,7 +13,7 @@ class HistoryScreen extends StatelessWidget {
     final fmt = DateFormat('MMM d · HH:mm');
     return Scaffold(
       backgroundColor: UberColors.black,
-      appBar: AppBar(title: Text('Trips', style: RType.titleSm())),
+      appBar: AppBar(title: Text('記錄', style: RType.titleSm())),
       body: BlocBuilder<SessionCubit, SessionState>(
         builder: (context, state) {
           final items = state.history;
@@ -22,7 +22,7 @@ class HistoryScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  'No trips yet.\nSlide to start on the map — free forever.',
+                  '未有記錄\n返地圖右滑開始計時。',
                   textAlign: TextAlign.center,
                   style: RType.muted(),
                 ),
@@ -41,7 +41,7 @@ class HistoryScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Text('This month', style: RType.muted()),
+                    Text('本月', style: RType.muted()),
                     const Spacer(),
                     Text(
                       'HK\$${state.monthTotal.toStringAsFixed(0)}',
@@ -66,7 +66,7 @@ class HistoryScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              s.parkName ?? 'Parking',
+                              s.parkName ?? '泊車',
                               style: RType.body(),
                             ),
                             Text(
