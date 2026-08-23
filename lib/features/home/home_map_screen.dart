@@ -238,8 +238,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Expanded(
                                   child: Text(
@@ -247,8 +248,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                         ? 'Nearby car parks'
                                         : 'Parking now',
                                     style: RType.title(),
+                                    // Syne g/y/p need room; avoid parent clip.
+                                    textHeightBehavior:
+                                        const TextHeightBehavior(
+                                      applyHeightToFirstAscent: false,
+                                      applyHeightToLastDescent: false,
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'Month HK\$${session.monthTotal.toStringAsFixed(0)}',
                                   style: RType.muted(),
