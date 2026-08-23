@@ -70,5 +70,7 @@
 	<string>Show nearby car parks and log parking near you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Show nearby car parks while you use Recordo.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

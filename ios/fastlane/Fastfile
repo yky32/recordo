@@ -1,0 +1,875 @@
+# Recordo Fastlane — patterned after ClipVal / Triftly (Flutter + TestFlight).
+# Single target (no Widget/Share). Fastfile lives in ios/fastlane/; project root is ../..
+
+FASTLANE_DIR = File.dirname(__FILE__)
+IOS_DIR = File.expand_path("..", FASTLANE_DIR)
+PROJECT_ROOT = File.expand_path("..", IOS_DIR)
+
+APP_IDENTIFIER = "com.recordo"
+APP_NAME = "Recordo"
+# Same Apple team as ClipVal / Triftly (ASC API + Distribution cert secrets).
+TEAM_ID = ENV["FASTLANE_TEAM_ID"] || "3G34999H3A"
+APPLE_ID = ENV["FASTLANE_USER"] || "wayneyu.dev@gmail.com"
+
+CI_SIGNING_KEYCHAIN_PASSWORD = "recordo-ci-keychain"
+
+def ci_build?
+  ENV["CI"] == "true"
+end
+
+def git_commit_sha
+  sha = ENV["GIT_COMMIT"].to_s.strip
+  return sha unless sha.empty?
+
+  `cd #{PROJECT_ROOT} && git rev-parse HEAD 2>/dev/null`.to_s.strip
+end
+
+def flutter_git_define_args
+  sha = git_commit_sha
+  return "" if sha.empty?
+
+  UI.message("🔖 Embedding GIT_COMMIT=#{sha[0, 7]}…")
+  "--dart-define=GIT_COMMIT=#{sha}"
+end
+
+def path_for_system_ruby
+  "/usr/bin:/usr/local/bin:#{ENV['PATH']}"
+end
+
+def gem_home_for_bundle
+  home = ENV["HOME"] || ENV["USERPROFILE"] || Dir.home
+  "#{home}/.gem/ruby/#{RbConfig::CONFIG['ruby_version']}"
+end
+
+def gem_path_for_bundle
+  "#{gem_home_for_bundle}:/Library/Ruby/Gems/2.6.0"
+end
+
+def find_pod_command
+  [
+    "/Library/Ruby/Gems/2.6.0/bin/pod",
+    "/usr/local/bin/pod",
+    "/opt/homebrew/bin/pod"
+  ].each { |path| return path if File.exist?(path) }
+  pod_path = `which pod 2>/dev/null`.strip
+  return pod_path unless pod_path.empty?
+
+  "pod"
+end
+
+def run_pod_install
+  install_script = File.join(IOS_DIR, "install_gems_and_pods.sh")
+  if File.executable?(install_script) && ENV["CI"] != "true"
+    UI.message("Running pod install via install_gems_and_pods.sh...")
+    begin
+      home = ENV["HOME"] || Dir.home
+      sh(
+        "cd #{PROJECT_ROOT} && env HOME=\"#{home}\" LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 " \
+        "#{install_script}",
+        log: true
+      )
+      UI.success("✅ pod install completed")
+      return true
+    rescue => script_ex
+      UI.important("⚠️  install script failed: #{script_ex.message}")
+    end
+  end
+
+  UI.message("Running pod install...")
+  ruby_bin = RbConfig.ruby
+  begin
+    gem_home = gem_home_for_bundle
+    gem_path = gem_path_for_bundle
+    sh(
+      "cd #{IOS_DIR} && env PATH=\"#{path_for_system_ruby}\" " \
+      "GEM_HOME=\"#{gem_home}\" GEM_PATH=\"#{gem_path}\" " \
+      "#{ruby_bin} -S bundle exec pod install --repo-update",
+      log: true
+    )
+    UI.success("✅ pod install completed (bundle exec)")
+    return true
+  rescue => ex
+    UI.important("⚠️  bundle exec pod failed: #{ex.message}")
+    pod_cmd = find_pod_command
+    begin
+      system_path = "/usr/bin:#{ENV['PATH']}"
+      sh(
+        "cd #{IOS_DIR} && env -u BUNDLE_GEMFILE -u BUNDLE_BIN_PATH -u BUNDLE_PATH " \
+        "PATH=\"#{system_path}\" #{pod_cmd} install --repo-update",
+        log: true
+      )
+      UI.success("✅ pod install completed (system pod)")
+      return false
+    rescue => sys_ex
+      pods_lock = File.join(IOS_DIR, "Pods", "Manifest.lock")
+      if File.exist?(pods_lock)
+        UI.important("Continuing (Pods/Manifest.lock exists).")
+        return true
+      end
+      UI.user_error!("Pod install failed. From project root: ./ios/install_gems_and_pods.sh")
+    end
+  end
+end
+
+def app_store_connect_api_key_params
+  key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"].to_s.strip
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+  key_content = ENV["APP_STORE_CONNECT_API_KEY_CONTENT"]
+  return nil if key_id.empty? || issuer_id.empty? || key_content.to_s.empty?
+
+  { key_id: key_id, issuer_id: issuer_id, key_content: key_content }
+end
+
+def build_app_store_connect_api_key
+  params = app_store_connect_api_key_params
+  return nil unless params
+
+  key_path = File.join(Dir.home, ".appstoreconnect", "api_key.p8")
+  FileUtils.mkdir_p(File.dirname(key_path))
+
+  content = params[:key_content].to_s
+  flag = ENV["APP_STORE_CONNECT_API_KEY_IS_BASE64"].to_s.strip.downcase
+  if %w[true 1 yes].include?(flag)
+    require "base64"
+    File.binwrite(key_path, Base64.decode64(content.gsub(/\s+/, "")))
+  else
+    File.write(key_path, content.gsub("\\n", "\n"))
+  end
+
+  body = File.read(key_path)
+  unless body.include?("BEGIN PRIVATE KEY")
+    UI.user_error!("ASC API key PEM missing BEGIN header")
+  end
+  if body.include?("\\n")
+    File.write(key_path, body.gsub("\\n", "\n"))
+    body = File.read(key_path)
+  end
+  File.chmod(0o600, key_path)
+  UI.message("ASC API key pem_bytes=#{File.size(key_path)} lines=#{body.lines.count}")
+
+  key = app_store_connect_api_key(
+    key_id: params[:key_id],
+    issuer_id: params[:issuer_id],
+    key_filepath: key_path,
+    duration: 1200,
+    in_house: false
+  )
+  UI.user_error!("app_store_connect_api_key returned nil") if key.nil?
+  key
+end
+
+def ci_signing_keychain_path
+  File.expand_path("~/Library/Keychains/recordo-ci.keychain-db")
+end
+
+def setup_ci_signing_keychain!
+  keychain = ci_signing_keychain_path
+  login_keychain = File.expand_path("~/Library/Keychains/login.keychain-db")
+
+  sh("security delete-keychain '#{keychain}' 2>/dev/null || true", log: false)
+  sh("security create-keychain -p '#{CI_SIGNING_KEYCHAIN_PASSWORD}' '#{keychain}'", log: false)
+  sh("security unlock-keychain -p '#{CI_SIGNING_KEYCHAIN_PASSWORD}' '#{keychain}'", log: false)
+  sh("security set-keychain-settings -lut 21600 '#{keychain}'", log: false)
+  sh("security list-keychains -d user -s '#{keychain}' '#{login_keychain}'", log: false)
+  keychain
+end
+
+def distribution_identity_installed?
+  keychain = ENV["CI"] ? ci_signing_keychain_path : File.expand_path("~/Library/Keychains/login.keychain-db")
+  output = `security find-identity -v -p codesigning '#{keychain}' 2>/dev/null`
+  output.include?("Apple Distribution") && output.include?(TEAM_ID)
+end
+
+def import_distribution_certificate_for_ci!
+  return false unless ENV["CI"]
+
+  cert_b64 = ENV["IOS_DISTRIBUTION_CERT_BASE64"]
+  return false if cert_b64.nil? || cert_b64.strip.empty?
+
+  require "base64"
+  p12_path = File.join(IOS_DIR, "distribution.ci.p12")
+  # Strip whitespace/newlines that can sneak in via secret mirroring
+  cleaned = cert_b64.to_s.gsub(/\s+/, "")
+  raw = Base64.decode64(cleaned)
+  UI.message("📦 CI p12 decoded bytes=#{raw.bytesize}")
+  UI.user_error!("❌ Decoded p12 is empty — check IOS_DISTRIBUTION_CERT_BASE64") if raw.bytesize < 100
+  File.binwrite(p12_path, raw)
+
+  keychain = setup_ci_signing_keychain!
+  password = (ENV["IOS_DISTRIBUTION_CERT_PASSWORD"] || "").to_s
+
+  begin
+    import_certificate(
+      certificate_path: p12_path,
+      certificate_password: password,
+      keychain_path: keychain,
+      keychain_password: CI_SIGNING_KEYCHAIN_PASSWORD
+    )
+  rescue => ex
+    UI.user_error!(
+      "❌ import_certificate failed (#{ex.message}). " \
+      "p12_bytes=#{raw.bytesize} pass_len=#{password.length}. " \
+      "Re-mirror IOS_DISTRIBUTION_CERT_* from clipvault-app."
+    )
+  end
+
+  begin
+    sh(
+      "security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k '#{CI_SIGNING_KEYCHAIN_PASSWORD}' '#{keychain}'",
+      log: false
+    )
+  rescue => ex
+    UI.important("⚠️  set-key-partition-list failed (often OK): #{ex.message}")
+  end
+
+  File.delete(p12_path) if File.exist?(p12_path)
+  UI.success("✅ Imported distribution certificate into CI keychain")
+  true
+ensure
+  File.delete(p12_path) if defined?(p12_path) && p12_path && File.exist?(p12_path)
+end
+
+
+def ensure_app_identifier_exists!
+  params = app_store_connect_api_key_params
+  UI.user_error!("ASC API key required to register App ID") unless params
+
+  key_path = File.join(Dir.home, ".appstoreconnect", "api_key.p8")
+  build_app_store_connect_api_key # materialize PEM + set lane context
+
+  require "spaceship"
+  token = Spaceship::ConnectAPI::Token.create(
+    key_id: params[:key_id],
+    issuer_id: params[:issuer_id],
+    filepath: key_path
+  )
+  Spaceship::ConnectAPI.token = token
+
+  existing = Spaceship::ConnectAPI::BundleId.all(
+    filter: { identifier: APP_IDENTIFIER },
+    limit: 5
+  ) rescue []
+  found = Array(existing).any? { |b| b.identifier.to_s == APP_IDENTIFIER }
+  if found
+    UI.success("App ID #{APP_IDENTIFIER} already exists")
+    return
+  end
+
+  UI.message("Creating App ID #{APP_IDENTIFIER} on Developer Portal...")
+  Spaceship::ConnectAPI::BundleId.create(
+    name: APP_NAME.gsub(/[^0-9A-Za-z ]/, "")[0, 50],
+    identifier: APP_IDENTIFIER,
+    platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS
+  )
+  UI.success("Created App ID #{APP_IDENTIFIER}")
+end
+
+def fetch_appstore_profile!(app_identifier:, force: false)
+  api_key = build_app_store_connect_api_key
+  UI.user_error!("ASC API key required for provisioning profile on CI") if api_key.nil? && ENV["CI"]
+  get_provisioning_profile(
+    app_identifier: app_identifier,
+    team_id: TEAM_ID,
+    force: force,
+    api_key: api_key
+  )
+  ENV["SIGH_NAME"]
+end
+
+def write_ci_export_options_plist!
+  profile_name = ENV["SIGH_NAME"]
+  UI.user_error!("SIGH_NAME is required to export the App Store IPA on CI.") unless profile_name
+
+  plist_path = File.join(IOS_DIR, "ExportOptions.ci.plist")
+  plist_content = <<~PLIST
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+      <key>method</key>
+      <string>app-store</string>
+      <key>signingStyle</key>
+      <string>manual</string>
+      <key>teamID</key>
+      <string>#{TEAM_ID}</string>
+      <key>provisioningProfiles</key>
+      <dict>
+        <key>#{APP_IDENTIFIER}</key>
+        <string>#{profile_name}</string>
+      </dict>
+    </dict>
+    </plist>
+  PLIST
+
+  File.write(plist_path, plist_content)
+  plist_path
+end
+
+def persist_ci_signing_env!
+  return unless ENV["CI"] && ENV["GITHUB_ENV"] && ENV["SIGH_NAME"]
+
+  File.open(ENV["GITHUB_ENV"], "a") do |file|
+    file.puts "SIGH_NAME=#{ENV['SIGH_NAME']}"
+  end
+end
+
+def ensure_runner_ipa_path!
+  ipa_dir = File.join(PROJECT_ROOT, "build/ios/ipa")
+  target = File.join(ipa_dir, "Runner.ipa")
+  return if File.exist?(target)
+
+  Dir.glob(File.join(ipa_dir, "*.ipa")).each do |path|
+    next if File.basename(path) == "Runner.ipa"
+
+    FileUtils.cp(path, target)
+    UI.message("📦 Normalized IPA → Runner.ipa (from #{File.basename(path)})")
+    return
+  end
+end
+
+def connect_api_for_spaceship
+  params = app_store_connect_api_key_params
+  return nil unless params
+
+  key_path = File.join(Dir.home, ".appstoreconnect", "api_key.p8")
+  if !File.exist?(key_path) && ENV["APP_STORE_CONNECT_API_KEY_IS_BASE64"] == "true"
+    require "base64"
+    FileUtils.mkdir_p(File.dirname(key_path))
+    File.binwrite(key_path, Base64.decode64(params[:key_content]))
+  end
+
+  token = if File.exist?(key_path)
+            Spaceship::ConnectAPI::Token.create(
+              key_id: params[:key_id],
+              issuer_id: params[:issuer_id],
+              filepath: key_path
+            )
+          else
+            Spaceship::ConnectAPI::Token.create(
+              key_id: params[:key_id],
+              issuer_id: params[:issuer_id],
+              key: params[:key_content]
+            )
+          end
+
+  Spaceship::ConnectAPI.token = token
+  token
+end
+
+def prune_certificates_of_type(type, keep:, revoked_ids:)
+  certs = Spaceship::ConnectAPI::Certificate.all(filter: { certificateType: type })
+  certs = certs.reject { |cert| revoked_ids.include?(cert.id) }
+  UI.message("Found #{certs.length} #{type} certificate(s)")
+  return if certs.length <= keep
+
+  sorted = certs.sort_by { |cert| cert.expiration_date.to_s }
+  revoke_list = sorted[0...(sorted.length - keep)]
+  revoke_list.each do |cert|
+    UI.message("Revoking #{type} certificate #{cert.display_name} (#{cert.id})")
+    cert.delete!
+    revoked_ids << cert.id
+  end
+end
+
+def read_pubspec_version
+  pubspec_path = File.join(PROJECT_ROOT, "pubspec.yaml")
+  UI.user_error!("❌ pubspec.yaml not found") unless File.exist?(pubspec_path)
+  content = File.read(pubspec_path)
+  version_match = content.match(/^version:\s*(\d+\.\d+\.\d+)\+(\d+)/)
+  UI.user_error!("❌ Could not parse version from pubspec.yaml") unless version_match
+  [pubspec_path, content, version_match[1], version_match[2].to_i]
+end
+
+def write_pubspec_version(pubspec_path, content, version_name, build_number)
+  new_content = content.gsub(
+    /^version:\s*\d+\.\d+\.\d+\+\d+/,
+    "version: #{version_name}+#{build_number}"
+  )
+  File.write(pubspec_path, new_content)
+end
+
+def increment_build_number_in_pubspec
+  pubspec_path, content, version_name, current_build = read_pubspec_version
+  new_build = current_build + 1
+  UI.message("📦 Incrementing build number: #{current_build} → #{new_build}")
+  write_pubspec_version(pubspec_path, content, version_name, new_build)
+  UI.success("✅ Build number updated to #{new_build} (#{version_name}+#{new_build})")
+  new_build
+end
+
+def increment_marketing_version_in_pubspec
+  pubspec_path, content, version_name, current_build = read_pubspec_version
+  parts = version_name.split(".").map(&:to_i)
+  UI.user_error!("❌ Unexpected version name: #{version_name}") unless parts.length == 3
+  parts[2] += 1
+  new_version_name = parts.join(".")
+  new_build = current_build + 1
+  UI.message("📦 Marketing bump #{version_name}+#{current_build} → #{new_version_name}+#{new_build}")
+  write_pubspec_version(pubspec_path, content, new_version_name, new_build)
+  [new_version_name, new_build]
+end
+
+def version_tuple(version_name)
+  version_name.to_s.split(".").map(&:to_i)
+end
+
+def compare_marketing_versions(a, b)
+  version_tuple(a) <=> version_tuple(b)
+end
+
+def fetch_app_store_train_floor_version
+  begin
+    require "spaceship"
+    app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+    unless app
+      UI.important("⚠️  ASC app #{APP_IDENTIFIER} not found — skip proactive version check")
+      return nil
+    end
+
+    floor = nil
+    begin
+      live = app.get_live_app_store_version
+      floor = live.version_string if live && live.version_string
+    rescue => ex
+      UI.message("ℹ️  No live App Store version yet (#{ex.message})")
+    end
+
+    closed_states = %w[
+      READY_FOR_SALE
+      PENDING_APPLE_RELEASE
+      PENDING_DEVELOPER_RELEASE
+      ACCEPTED
+    ]
+    begin
+      versions = app.get_app_store_versions(limit: 30) || []
+      versions.each do |v|
+        state = v.app_store_state.to_s
+        next unless closed_states.include?(state)
+        vs = v.version_string.to_s
+        next if vs.empty?
+        if floor.nil? || compare_marketing_versions(vs, floor) > 0
+          floor = vs
+        end
+      end
+    rescue => ex
+      UI.important("⚠️  Could not list ASC versions: #{ex.message}")
+    end
+
+    UI.message("🏪 ASC train floor: #{floor || 'none'}")
+    floor
+  rescue => ex
+    UI.important("⚠️  ASC version lookup failed: #{ex.message}")
+    nil
+  end
+end
+
+def ensure_marketing_version_above_app_store_floor!
+  floor = fetch_app_store_train_floor_version
+  return nil if floor.nil? || floor.to_s.empty?
+
+  pubspec_path, content, name, build = read_pubspec_version
+  if compare_marketing_versions(name, floor) > 0
+    UI.success("✅ pubspec #{name} > ASC floor #{floor}")
+    return nil
+  end
+
+  old = "#{name}+#{build}"
+  while compare_marketing_versions(name, floor) <= 0
+    parts = name.split(".").map(&:to_i)
+    UI.user_error!("❌ Unexpected version name: #{name}") unless parts.length == 3
+    parts[2] += 1
+    name = parts.join(".")
+    build += 1
+  end
+
+  UI.important("🚂 ASC floor is #{floor} — proactive bump #{old} → #{name}+#{build}")
+  write_pubspec_version(pubspec_path, content, name, build)
+  commit_and_push_build_number(
+    build,
+    commit_subject: "chore: Auto-bump marketing version to #{name}+#{build} [skip ci]",
+    commit_body: "Proactive bump: App Store train floor #{floor} closed for new builds."
+  )
+  [name, build]
+end
+
+def closed_app_store_train_error?(message)
+  msg = message.to_s
+  msg.include?("90186") ||
+    msg.include?("90062") ||
+    msg.include?("Invalid Pre-Release Train") ||
+    msg.include?("closed for new build submissions") ||
+    msg.include?("must contain a higher version than that of the previously approved version") ||
+    msg.include?("This bundle is invalid. The value for key CFBundleShortVersionString")
+end
+
+def read_ipa_short_version(ipa_path)
+  FastlaneCore::IpaFileAnalyser.fetch_app_version(ipa_path)
+rescue => ex
+  UI.important("⚠️  Could not analyse IPA version: #{ex.message}")
+  nil
+end
+
+def verify_ipa_matches_pubspec!(ipa_path)
+  _p, _c, expected_name, expected_build = read_pubspec_version
+  short = read_ipa_short_version(ipa_path)
+  UI.message("📋 IPA short version=#{short.inspect} (expect #{expected_name}+#{expected_build})")
+  if short && short != expected_name
+    UI.user_error!("❌ IPA CFBundleShortVersionString is #{short}, pubspec is #{expected_name}.")
+  end
+  true
+end
+
+def flutter_version_build_args
+  _p, _c, version_name, build_number = read_pubspec_version
+  "--build-name=#{version_name} --build-number=#{build_number}"
+end
+
+def generate_release_notes
+  begin
+    unless system("cd #{PROJECT_ROOT} && git rev-parse --git-dir > /dev/null 2>&1")
+      return "[Feature: Manual build]\n[Build time: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}]"
+    end
+
+    commit_output = `cd #{PROJECT_ROOT} && git log -10 --pretty=format:\"%H|%s\" --no-merges`.strip
+    valid_commits = []
+    commit_output.split("\n").each do |line|
+      next if line.empty?
+      parts = line.split("|", 2)
+      next if parts.length < 2
+      commit_msg = parts[1].strip
+      next if commit_msg.include?("Auto-increment build number") ||
+              commit_msg.include?("chore: Auto-increment") ||
+              commit_msg.include?("Auto-bump marketing version") ||
+              commit_msg.include?("chore: Auto-bump")
+      cleaned = commit_msg.length > 150 ? commit_msg[0..150] : commit_msg
+      valid_commits << cleaned unless cleaned.empty?
+      break if valid_commits.length >= 3
+    end
+    valid_commits = ["Manual build"] if valid_commits.empty?
+    build_time = Time.now.strftime("%Y-%m-%d %H:%M:%S")
+    prefix = ENV["TESTFLIGHT_CHANGELOG_PREFIX"].to_s.strip
+    parts = []
+    parts << prefix unless prefix.empty?
+    parts.concat(valid_commits.each_with_index.map { |msg, i| "[Feature #{i + 1}: #{msg}]" })
+    parts << "[Build time: #{build_time}]"
+    notes = parts.join("\n")
+    UI.message("📝 Release notes:\n#{notes}")
+    notes
+  rescue => ex
+    UI.important("⚠️  Failed to generate release notes: #{ex.message}")
+    "[Feature: Manual build]\n[Build time: #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}]"
+  end
+end
+
+def commit_and_push_build_number(new_build_number, commit_subject: nil, commit_body: nil)
+  UI.message("📝 Committing pubspec version change...")
+  begin
+    unless system("cd #{PROJECT_ROOT} && git rev-parse --git-dir > /dev/null 2>&1")
+      UI.important("⚠️  Not a git repository, skipping commit")
+      return
+    end
+
+    git_status = `cd #{PROJECT_ROOT} && git status --porcelain pubspec.yaml`.strip
+    if git_status.empty?
+      UI.important("ℹ️  No changes to pubspec.yaml, skipping commit")
+      return
+    end
+
+    subject = commit_subject ||
+              "chore: Auto-increment build number to #{new_build_number} [skip ci]"
+    body = commit_body || "Build number automatically incremented by Fastfile"
+
+    sh("cd #{PROJECT_ROOT} && git add pubspec.yaml")
+    subject_q = subject.gsub('"', '\\"')
+    body_q = body.gsub('"', '\\"')
+    sh(
+      "cd #{PROJECT_ROOT} && git commit " \
+      "-m \"#{subject_q}\" " \
+      "-m \"#{body_q}\""
+    )
+    UI.success("✅ Version change committed")
+    sh("cd #{PROJECT_ROOT} && git push")
+    UI.success("✅ Version change pushed to remote")
+  rescue => ex
+    UI.important("⚠️  Failed to commit/push version: #{ex.message}")
+  end
+end
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Build iOS Debug (no codesign)"
+  lane :build_debug do
+    sh("cd #{PROJECT_ROOT} && flutter pub get")
+    run_pod_install
+    sh(
+      "cd #{PROJECT_ROOT} && env -u BUNDLE_GEMFILE -u BUNDLE_BIN_PATH -u BUNDLE_PATH " \
+      "flutter build ios --debug --no-codesign"
+    )
+    UI.success("✅ iOS Debug build completed!")
+  end
+
+  desc "Build iOS Release (no codesign)"
+  lane :build_release do
+    sh("cd #{PROJECT_ROOT} && flutter pub get")
+    run_pod_install
+    sh(
+      "cd #{PROJECT_ROOT} && env -u BUNDLE_GEMFILE -u BUNDLE_BIN_PATH -u BUNDLE_PATH " \
+      "flutter build ios --release --no-codesign"
+    )
+    UI.success("✅ iOS Release build completed!")
+  end
+
+  desc "Build IPA. Options: export_method (default development)"
+  lane :build_ipa do |options|
+    export_method = options[:export_method] || "development"
+
+    sh("cd #{PROJECT_ROOT} && flutter pub get")
+    begin
+      gem_home = gem_home_for_bundle
+      sh(
+        "cd #{IOS_DIR} && env PATH=\"#{path_for_system_ruby}\" " \
+        "GEM_HOME=\"#{gem_home}\" GEM_PATH=\"#{gem_home}\" bundle install",
+        log: true
+      )
+    rescue => ex
+      UI.important("⚠️  bundle install: #{ex.message}")
+    end
+
+    if ci_build? && export_method == "app-store"
+      UI.message("Skipping pre-build pod install on CI (flutter build ipa runs pod install)")
+    else
+      run_pod_install
+    end
+
+    if ci_build? && export_method == "app-store"
+      UI.user_error!("SIGH_NAME must be set. Run setup_appstore_signing first.") unless ENV["SIGH_NAME"]
+
+      update_code_signing_settings(
+        use_automatic_signing: false,
+        path: "#{IOS_DIR}/Runner.xcodeproj",
+        team_id: TEAM_ID,
+        bundle_identifier: APP_IDENTIFIER,
+        profile_name: ENV["SIGH_NAME"],
+        code_sign_identity: "Apple Distribution",
+        targets: ["Runner"]
+      )
+
+      export_plist = write_ci_export_options_plist!
+      ver_args = flutter_version_build_args
+      git_def = flutter_git_define_args
+      UI.message("📦 Building IPA via flutter build ipa (#{ver_args})...")
+      sh(
+        "cd #{PROJECT_ROOT} && flutter build ipa --release " \
+        "#{ver_args} --export-options-plist=#{export_plist} #{git_def}"
+      )
+      ensure_runner_ipa_path!
+    else
+      ver_args = flutter_version_build_args
+      git_def = flutter_git_define_args
+      sh("cd #{PROJECT_ROOT} && flutter build ios --release --no-codesign #{ver_args} #{git_def}")
+
+      export_opts = {
+        method: export_method,
+        signingStyle: "automatic",
+        teamID: TEAM_ID
+      }
+
+      if export_method == "app-store"
+        begin
+          fetch_appstore_profile!(app_identifier: APP_IDENTIFIER)
+        rescue => ex
+          UI.important("⚠️  Could not fetch profile: #{ex.message}")
+        end
+      end
+
+      build_app(
+        workspace: "#{IOS_DIR}/Runner.xcworkspace",
+        scheme: "Runner",
+        export_method: export_method,
+        output_directory: "#{PROJECT_ROOT}/build/ios/ipa",
+        export_options: export_opts
+      )
+      ensure_runner_ipa_path!
+    end
+
+    UI.success("✅ IPA created successfully!")
+  end
+
+  desc "Build + upload TestFlight (auto build bump + release notes)"
+  lane :upload_testflight do |options|
+    skip_build = options[:skip_build] || false
+    api_key = build_app_store_connect_api_key
+
+    unless skip_build
+      ensure_marketing_version_above_app_store_floor!
+      UI.important("🔢 Auto-incrementing build number...")
+      new_build_number = increment_build_number_in_pubspec
+      commit_and_push_build_number(new_build_number)
+
+      UI.important("📦 Building IPA for App Store / TestFlight...")
+      build_success = false
+      begin
+        build_ipa(export_method: "app-store")
+        build_success = true
+      rescue => ex
+        error_msg = ex.message
+        is_signing = error_msg.include?("provisioning") ||
+                     error_msg.include?("certificate") ||
+                     error_msg.include?("signing") ||
+                     error_msg.include?("CodeSign")
+        if is_signing
+          UI.important("🔧 Signing issue — setup_appstore_signing then retry...")
+          setup_appstore_signing
+          build_ipa(export_method: "app-store")
+          build_success = true
+        else
+          raise
+        end
+      end
+      UI.user_error!("Failed to build IPA") unless build_success
+    end
+
+    ipa_path = "#{PROJECT_ROOT}/build/ios/ipa/Runner.ipa"
+    UI.user_error!("❌ IPA not found at #{ipa_path}") unless File.exist?(ipa_path)
+    verify_ipa_matches_pubspec!(ipa_path) unless skip_build
+
+    release_notes = generate_release_notes
+    pilot_opts = {
+      ipa: ipa_path,
+      app_identifier: APP_IDENTIFIER,
+      skip_waiting_for_build_processing: false,
+      skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
+      changelog: release_notes,
+      localized_build_info: {
+        "en-US" => { whats_new: release_notes }
+      },
+      # Skip ASC export compliance questionnaire (HTTPS / standard crypto only)
+      uses_non_exempt_encryption: false
+    }
+    pilot_opts[:api_key] = api_key if api_key
+
+    begin
+      upload_to_testflight(pilot_opts)
+      UI.success("✅ Uploaded to TestFlight!")
+    rescue => ex
+      error_msg = ex.message
+      if error_msg.include?("Couldn't find app") || error_msg.include?("not found on the account")
+        UI.important("🔧 App not found — create_app then retry...")
+        create_app
+        upload_to_testflight(pilot_opts)
+        UI.success("✅ Uploaded to TestFlight!")
+      elsif closed_app_store_train_error?(error_msg) && !skip_build
+        UI.important("🚂 Pre-release train closed — bump marketing + rebuild...")
+        new_name, new_build = increment_marketing_version_in_pubspec
+        commit_and_push_build_number(
+          new_build,
+          commit_subject: "chore: Auto-bump marketing version to #{new_name}+#{new_build} [skip ci]",
+          commit_body: "ASC closed previous marketing train (90186/90062)."
+        )
+        build_ipa(export_method: "app-store")
+        verify_ipa_matches_pubspec!(ipa_path)
+        upload_to_testflight(pilot_opts)
+        UI.success("✅ Uploaded after version bump (#{new_name}+#{new_build})")
+      else
+        raise
+      end
+    end
+  end
+
+  desc "Create app in App Store Connect + Developer Portal (ASC API key)"
+  lane :create_app do
+    UI.message("Creating #{APP_NAME} (#{APP_IDENTIFIER}) via ASC API...")
+    ensure_app_identifier_exists!
+    params = app_store_connect_api_key_params
+    key_path = File.join(Dir.home, ".appstoreconnect", "api_key.p8")
+    build_app_store_connect_api_key
+
+    require "spaceship"
+    token = Spaceship::ConnectAPI::Token.create(
+      key_id: params[:key_id],
+      issuer_id: params[:issuer_id],
+      filepath: key_path
+    )
+    Spaceship::ConnectAPI.token = token
+
+    existing = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER) rescue nil
+    if existing
+      UI.success("ASC app already exists: #{existing.name} (#{existing.id})")
+      next
+    end
+
+    sku = "recordo#{Time.now.strftime('%Y%m%d%H%M')}"
+    begin
+      app = Spaceship::ConnectAPI::App.create(
+        name: APP_NAME,
+        version_string: "1.0.0",
+        sku: sku,
+        primary_locale: "en-US",
+        bundle_id: APP_IDENTIFIER,
+        platforms: ["IOS"]
+      )
+      UI.success("Created ASC app #{app.name} id=#{app.id} sku=#{sku}")
+    rescue => ex
+      UI.user_error!("ASC App.create failed: #{ex.class}: #{ex.message}")
+    end
+  end
+
+  desc "Revoke excess API Development certs on CI"
+  lane :prune_excess_certificates_for_ci do
+    next unless ENV["CI"]
+    next unless connect_api_for_spaceship
+
+    revoked_ids = []
+    %w[DEVELOPMENT IOS_DEVELOPMENT].each do |type|
+      prune_certificates_of_type(type, keep: 0, revoked_ids: revoked_ids)
+    end
+  end
+
+  desc "Setup App Store distribution certificate + profile (Runner only)"
+  lane :setup_appstore_signing do
+    UI.message("🔧 App Store signing for #{APP_IDENTIFIER}...")
+    api_key_params = app_store_connect_api_key_params
+
+    begin
+      if ENV["CI"]
+        UI.user_error!("ASC API key secrets required on CI") unless api_key_params
+        import_distribution_certificate_for_ci!
+        unless distribution_identity_installed?
+          UI.user_error!(
+            "No Apple Distribution identity. Set IOS_DISTRIBUTION_CERT_BASE64 + PASSWORD."
+          )
+        end
+      else
+        api_key = build_app_store_connect_api_key
+        if api_key
+          get_certificates(development: false, api_key: api_key, team_id: TEAM_ID)
+        else
+          get_certificates(development: false, username: APPLE_ID, team_id: TEAM_ID)
+        end
+      end
+      UI.message("Getting App Store provisioning profile for #{APP_IDENTIFIER}...")
+      ensure_app_identifier_exists!
+      main_profile = fetch_appstore_profile!(
+        app_identifier: APP_IDENTIFIER,
+        force: ENV["CI"] == "true"
+      )
+      ENV["SIGH_NAME"] = main_profile
+      persist_ci_signing_env!
+      UI.success("✅ Profile ready! SIGH_NAME=#{main_profile}")
+    rescue => ex
+      UI.important("⚠️  setup failed: #{ex.message}")
+      UI.important("   open ios/Runner.xcworkspace → Signing → team #{TEAM_ID}")
+      raise
+    end
+  end
+
+  desc "Clean Flutter + pods"
+  lane :clean do
+    sh("cd #{PROJECT_ROOT} && flutter clean")
+    sh("cd #{IOS_DIR} && rm -rf Pods Podfile.lock")
+    UI.success("✅ Clean done")
+  end
+end

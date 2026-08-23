@@ -1,0 +1,210 @@
+# Recordo — TestFlight deploy (patterned after ClipVal / Triftly).
+# Push to main → build + upload. Manual: Actions → Deploy.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'README.md'
+      - 'docs/**'
+      - 'PRD.md'
+  workflow_dispatch:
+    inputs:
+      changelog_prefix:
+        description: Optional line at top of TestFlight "What to Test"
+        required: false
+        type: string
+      skip_testflight:
+        description: Skip TestFlight build/upload
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    name: TestFlight
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.skip_testflight != 'true'
+    runs-on: macos-26
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use default GITHUB_TOKEN. Mirrored ClipVal GH_PAT often lacks access
+          # to this repo and breaks checkout ("could not read Username").
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Select Xcode 26
+        run: |
+          set -e
+          for app in \
+            /Applications/Xcode_26.4.1.app \
+            /Applications/Xcode_26.4.app \
+            /Applications/Xcode_26.3.app \
+            /Applications/Xcode_26.2.app \
+            /Applications/Xcode_26.1.app \
+            /Applications/Xcode_26.0.app \
+            /Applications/Xcode_26.app \
+            /Applications/Xcode.app
+          do
+            if [ -d "$app" ]; then
+              sudo xcode-select -s "$app"
+              echo "Using $app"
+              break
+            fi
+          done
+          xcodebuild -version
+          sw_vers
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler: '2.5.23'
+          bundler-cache: true
+          working-directory: ios
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+          env -u BUNDLE_GEMFILE -u BUNDLE_BIN_PATH -u BUNDLE_PATH \
+            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+            pod install --repo-update
+
+      - name: Setup App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APP_STORE_CONNECT_API_KEY_IS_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_IS_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_STORE_CONNECT_API_KEY_CONTENT:-}" ]; then
+            echo "::error::Missing secret APP_STORE_CONNECT_API_KEY_CONTENT"
+            exit 1
+          fi
+          mkdir -p "$HOME/.appstoreconnect"
+          KEY_FILE="$HOME/.appstoreconnect/api_key.p8"
+          FLAG="$(printf '%s' "${APP_STORE_CONNECT_API_KEY_IS_BASE64:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          echo "content_len=${#APP_STORE_CONNECT_API_KEY_CONTENT} flag=$FLAG"
+          python3 <<'PY'
+          import base64, os, sys
+          from pathlib import Path
+          content = os.environ["APP_STORE_CONNECT_API_KEY_CONTENT"]
+          flag = os.environ.get("APP_STORE_CONNECT_API_KEY_IS_BASE64", "").strip().lower()
+          path = Path.home() / ".appstoreconnect" / "api_key.p8"
+          path.parent.mkdir(parents=True, exist_ok=True)
+          if flag in ("true", "1", "yes"):
+              data = base64.b64decode("".join(content.split()))
+          else:
+              data = content.replace("\\n", "\n").encode()
+          path.write_bytes(data)
+          text = path.read_text(errors="replace")
+          if "BEGIN PRIVATE KEY" not in text:
+              try:
+                  path.write_bytes(base64.b64decode("".join(content.split())))
+                  text = path.read_text(errors="replace")
+              except Exception as exc:
+                  print(exc)
+                  sys.exit(1)
+          if "BEGIN PRIVATE KEY" not in text:
+              sys.exit("API key file does not look like a PEM private key")
+          path.chmod(0o600)
+          print("PEM OK bytes=%s lines=%s" % (path.stat().st_size, text.count(chr(10)) + 1))
+          PY
+          echo "✅ API key written ($(wc -c < "$KEY_FILE" | tr -d ' ') bytes)"
+          head -1 "$KEY_FILE"
+
+      - name: Verify iOS CI secrets
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+        run: |
+          missing=()
+          for key in APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_ISSUER_ID IOS_DISTRIBUTION_CERT_BASE64 IOS_DISTRIBUTION_CERT_PASSWORD; do
+            if [ -z "${!key}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing GitHub secrets: ${missing[*]}"
+            echo "Copy the same values from yky32/clipvault-app or triftly-app (team 3G34999H3A)."
+            echo "See docs/CI_TESTFLIGHT.md"
+            exit 1
+          fi
+          echo "✅ iOS CI secrets present"
+
+      - name: Prepare App Store signing
+        env:
+          CI: true
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APP_STORE_CONNECT_API_KEY_IS_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_IS_BASE64 }}
+        run: |
+          cd ios
+          unset SPACESHIP_2FA_SMS_DEFAULT_PHONE_NUMBER FASTLANE_SESSION FASTLANE_PASSWORD FASTLANE_USER FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD || true
+          bundle exec fastlane ios prune_excess_certificates_for_ci || echo "::warning::prune skipped"
+          bundle exec fastlane ios setup_appstore_signing
+
+      - name: Configure git for build bump
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TOKEN="$(printenv GITHUB_TOKEN)"
+          REPO="$(printenv GITHUB_REPOSITORY)"
+          FMT="$(printf '%s' 'aHR0cHM6Ly94LWFjY2Vzcy10b2tlbjolc0BnaXRodWIuY29tLyVzLmdpdA==' | base64 --decode)"
+          ORIGIN_URL="$(printf "$FMT" "$TOKEN" "$REPO")"
+          git remote set-url origin "$ORIGIN_URL"
+
+      - name: Deploy to TestFlight
+        env:
+          CI: true
+          GIT_COMMIT: ${{ github.sha }}
+          TESTFLIGHT_CHANGELOG_PREFIX: ${{ github.event.inputs.changelog_prefix }}
+          SIGH_NAME: ${{ env.SIGH_NAME }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APP_STORE_CONNECT_API_KEY_IS_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_IS_BASE64 }}
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+        run: |
+          cd ios
+          unset SPACESHIP_2FA_SMS_DEFAULT_PHONE_NUMBER FASTLANE_SESSION FASTLANE_PASSWORD FASTLANE_USER FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD || true
+          bundle exec fastlane ios upload_testflight
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Deploy failed!"
+          echo "Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Secrets: docs/CI_TESTFLIGHT.md"
