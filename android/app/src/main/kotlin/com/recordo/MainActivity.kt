@@ -1,4 +1,4 @@
-package com.recordo.recordo
+package com.recordo
 
 import io.flutter.embedding.android.FlutterActivity
 
