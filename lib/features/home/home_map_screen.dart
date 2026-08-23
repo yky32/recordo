@@ -317,13 +317,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                     onCompleted: () => _endSession(context),
                                   ),
                           ),
-                          Padding(
-                            padding: EdgeInsets.only(bottom: 4 + bottom / 4),
-                            child: Text(
-                              'Free · UGC prices · made for HK drivers',
-                              style: RType.label(),
-                            ),
-                          ),
                         ],
                       ),
                     ),
