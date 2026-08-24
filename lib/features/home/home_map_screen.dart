@@ -291,32 +291,40 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  ParkMap(
-                    key: _mapKey,
-                    parks: catalog.parks,
-                    selectedId: catalog.selectedId,
-                    bandTopY: _bandTopY,
-                    bandBottomY: _bandBottomY,
-                    onSelect: (id) {
-                      hideKeyboard();
-                      context.read<ParkCatalogCubit>().select(id);
-                    },
-                    onMapInteraction: hideKeyboard,
-                    onUserLocation: (ll) => context
-                        .read<ParkCatalogCubit>()
-                        .setUserLocation(ll.latitude, ll.longitude),
-                    onPinMoved: (ll) => context
-                        .read<ParkCatalogCubit>()
-                        .setPin(ll.latitude, ll.longitude),
-                    onLocateState: (locating, err) {
-                      if (!mounted) return;
-                      setState(() => _locating = locating);
-                      if (err != null && err.isNotEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(err)),
-                        );
-                      }
-                    },
+                  // Dark fill under map chrome
+                  const ColoredBox(color: UberColors.mapBlock),
+                  // Map ONLY in visible band (search bottom → sheet top).
+                  // Geometric center of this widget == optical mid of red lines.
+                  Positioned(
+                    top: _bandTopY,
+                    left: 0,
+                    right: 0,
+                    bottom: (screenH - _bandBottomY).clamp(0.0, screenH),
+                    child: ParkMap(
+                      key: _mapKey,
+                      parks: catalog.parks,
+                      selectedId: catalog.selectedId,
+                      onSelect: (id) {
+                        hideKeyboard();
+                        context.read<ParkCatalogCubit>().select(id);
+                      },
+                      onMapInteraction: hideKeyboard,
+                      onUserLocation: (ll) => context
+                          .read<ParkCatalogCubit>()
+                          .setUserLocation(ll.latitude, ll.longitude),
+                      onPinMoved: (ll) => context
+                          .read<ParkCatalogCubit>()
+                          .setPin(ll.latitude, ll.longitude),
+                      onLocateState: (locating, err) {
+                        if (!mounted) return;
+                        setState(() => _locating = locating);
+                        if (err != null && err.isNotEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(err)),
+                          );
+                        }
+                      },
+                    ),
                   ),
                   // Top floating search (Maps-style) + history
                   SafeArea(
@@ -406,11 +414,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                   _bandTopY = band.top;
                                   _bandBottomY = band.bottom;
                                 });
-                                _mapKey.currentState?.centerOnMe(
-                                  animated: true,
-                                  bandTop: band.top,
-                                  bandBottom: band.bottom,
-                                );
+                                // After layout settles map size, center
+                                WidgetsBinding.instance
+                                    .addPostFrameCallback((_) {
+                                  _mapKey.currentState?.centerOnMe();
+                                });
                               },
                         child: SizedBox(
                           width: 48,

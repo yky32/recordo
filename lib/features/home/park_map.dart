@@ -7,7 +7,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park.dart';
 
-/// Dark map + park markers + GPS. Locate control lives in HomeMapScreen.
+/// Map fills only the visible band (parent positions it).
+/// Plain [move] centers on geometric mid == optical mid of search↔sheet.
 class ParkMap extends StatefulWidget {
   const ParkMap({
     super.key,
@@ -18,10 +19,6 @@ class ParkMap extends StatefulWidget {
     this.onPinMoved,
     this.onLocateState,
     this.onMapInteraction,
-    /// Screen Y of search bar bottom (top red line).
-    this.bandTopY = 120,
-    /// Screen Y of sheet top / handle (bottom red line).
-    this.bandBottomY = 500,
   });
 
   final List<Park> parks;
@@ -31,8 +28,6 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
   final VoidCallback? onMapInteraction;
-  final double bandTopY;
-  final double bandBottomY;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -47,8 +42,6 @@ class ParkMapState extends State<ParkMap> {
   bool _locating = false;
   bool _didInitialRecenter = false;
   bool _programmaticMove = false;
-  double? _pendingBandTop;
-  double? _pendingBandBottom;
 
   @override
   void initState() {
@@ -67,16 +60,15 @@ class ParkMapState extends State<ParkMap> {
   @override
   void didUpdateWidget(covariant ParkMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Only re-center when selection changes — never on sheet drag.
     if (widget.selectedId != null &&
         widget.selectedId != oldWidget.selectedId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) centerOnSelected(animated: true);
+        if (mounted) centerOnSelected();
       });
     }
   }
 
-  void centerOnSelected({bool animated = true}) {
+  void centerOnSelected() {
     final id = widget.selectedId;
     if (id == null) return;
     final p = widget.parks.where((e) => e.id == id).firstOrNull;
@@ -84,91 +76,30 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] at the exact midpoint of [bandTop]→[bandBottom] (red lines).
-  /// Uses flutter_map moveRaw offset math only (CameraFit was wrong when sheet tall).
-  void _centerOn(
-    LatLng ll, {
-    double? zoom,
-    double? bandTop,
-    double? bandBottom,
-  }) {
+  /// Map widget is already only the visible band → plain center is correct.
+  void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
     final z = (zoom ?? 15.5).clamp(14.0, 16.5);
-    final h = MediaQuery.sizeOf(context).height;
-
-    var top = bandTop ?? widget.bandTopY;
-    var bottom = bandBottom ?? widget.bandBottomY;
-    if (!top.isFinite || !bottom.isFinite || bottom <= top + 60) {
-      top = h * 0.14;
-      bottom = h * 0.55;
-    }
-
-    // True midpoint between the two red lines
-    final midY = (top + bottom) / 2.0;
-    // flutter_map: offset +Y places the LatLng LOWER on screen.
-    // Want LatLng at midY; geometric center is h/2 → offset.y = midY - h/2
-    final offsetY = midY - h / 2;
-
     _programmaticMove = true;
     try {
-      final cam = _map.camera;
-      final newPoint = cam.projectAtZoom(ll, z);
-      // Same as MapControllerImpl.moveRaw with offset
-      final center = cam.unprojectAtZoom(
-        newPoint - Offset(0, offsetY),
-        z,
-      );
-      final ok = _map.move(center, z);
-      if (!ok) {
-        _map.move(ll, z, offset: Offset(0, offsetY));
-      }
-    } catch (_) {
-      try {
-        _map.move(ll, z, offset: Offset(0, offsetY));
-      } catch (_) {
-        _map.move(ll, z);
-      }
-    }
-    _clearProg();
-  }
-
-  void _clearProg() {
-    Future<void>.delayed(const Duration(milliseconds: 150), () {
+      _map.move(ll, z);
+    } catch (_) {}
+    Future<void>.delayed(const Duration(milliseconds: 120), () {
       _programmaticMove = false;
     });
   }
 
-  /// Locate button — [bandTop]/[bandBottom] = live measure from parent.
-  void centerOnMe({
-    bool animated = true,
-    double? bandTop,
-    double? bandBottom,
-  }) {
+  void centerOnMe({bool animated = true}) {
     final me = _me;
     if (me == null) {
-      locate(
-        forceCamera: true,
-        bandTop: bandTop,
-        bandBottom: bandBottom,
-      );
+      locate(forceCamera: true);
       return;
     }
-    _centerOn(
-      me,
-      zoom: 15.5,
-      bandTop: bandTop,
-      bandBottom: bandBottom,
-    );
+    _centerOn(me, zoom: 15.5);
   }
 
-  Future<void> locate({
-    bool forceCamera = false,
-    double? bandTop,
-    double? bandBottom,
-  }) async {
+  Future<void> locate({bool forceCamera = false}) async {
     if (_locating) return;
-    _pendingBandTop = bandTop;
-    _pendingBandBottom = bandBottom;
     setState(() => _locating = true);
     widget.onLocateState?.call(true, null);
     try {
@@ -207,6 +138,29 @@ class ParkMapState extends State<ParkMap> {
         return;
       }
 
+      // Sim far from HK (e.g. Apple default US) → keep map useful for dogfood
+      final hk = Geolocator.distanceBetween(
+        pos.latitude,
+        pos.longitude,
+        hkCenter.latitude,
+        hkCenter.longitude,
+      );
+      if (hk > 500000) {
+        // >500km from HK — use Wan Chai demo pin for local park list
+        pos = Position(
+          longitude: 114.1747,
+          latitude: 22.2783,
+          timestamp: DateTime.now(),
+          accuracy: 10,
+          altitude: 0,
+          altitudeAccuracy: 0,
+          heading: 0,
+          headingAccuracy: 0,
+          speed: 0,
+          speedAccuracy: 0,
+        );
+      }
+
       _applyPosition(pos, moveCamera: forceCamera || !_didInitialRecenter);
       widget.onLocateState?.call(false, null);
 
@@ -217,7 +171,16 @@ class ParkMapState extends State<ParkMap> {
           distanceFilter: 15,
         ),
       ).listen(
-        (p) => _applyPosition(p, moveCamera: false),
+        (p) {
+          final d = Geolocator.distanceBetween(
+            p.latitude,
+            p.longitude,
+            hkCenter.latitude,
+            hkCenter.longitude,
+          );
+          if (d > 500000) return; // ignore far stream when using demo pin
+          _applyPosition(p, moveCamera: false);
+        },
         onError: (_) {},
       );
     } catch (_) {
@@ -234,12 +197,8 @@ class ParkMapState extends State<ParkMap> {
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
-      final t = _pendingBandTop;
-      final b = _pendingBandBottom;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _centerOn(ll, zoom: 15.5, bandTop: t, bandBottom: b);
-        }
+        if (mounted) _centerOn(ll, zoom: 15.5);
       });
     }
   }
@@ -303,10 +262,6 @@ class ParkMapState extends State<ParkMap> {
           retinaMode: RetinaMode.isHighDensity(context),
         ),
         MarkerLayer(markers: markers),
-        const SimpleAttributionWidget(
-          source: Text('© OSM · CARTO'),
-          backgroundColor: Color(0x66000000),
-        ),
       ],
     );
   }
