@@ -212,12 +212,42 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       }
                     },
                   ),
+                  // Top floating search (Maps-style) + history
                   SafeArea(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Spacer(),
+                          Expanded(
+                            child: Material(
+                              color: UberColors.sheet.withValues(alpha: 0.94),
+                              elevation: 6,
+                              shadowColor: Colors.black54,
+                              borderRadius: BorderRadius.circular(16),
+                              child: TextField(
+                                onChanged: (v) => context
+                                    .read<ParkCatalogCubit>()
+                                    .setQuery(v),
+                                style: RType.body(),
+                                cursorColor: UberColors.white,
+                                decoration: InputDecoration(
+                                  hintText: '搜尋停車場 / 地區',
+                                  hintStyle: RType.muted(),
+                                  prefixIcon: const Icon(
+                                    Icons.search_rounded,
+                                    color: UberColors.muted,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
                           _RoundIcon(
                             icon: Icons.receipt_long_rounded,
                             onTap: () => context.push('/history'),
@@ -228,7 +258,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                   ),
                   if (active != null)
                     Positioned(
-                      top: MediaQuery.paddingOf(context).top + 64,
+                      top: MediaQuery.paddingOf(context).top + 72,
                       left: 16,
                       right: 16,
                       child: _LiveSessionBanner(
@@ -324,62 +354,33 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                   children: [
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
-                                          20, 8, 20, 6),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                          20, 4, 20, 8),
+                                      child: Row(
                                         children: [
-                                          Text(
-                                            active == null ? '附近停車場' : '泊緊',
-                                            style: RType.title(),
-                                            textHeightBehavior:
-                                                const TextHeightBehavior(
-                                              applyHeightToFirstAscent: false,
-                                              applyHeightToLastDescent: false,
+                                          Expanded(
+                                            child: Text(
+                                              active == null
+                                                  ? '附近停車場'
+                                                  : '泊緊',
+                                              style: RType.title(),
+                                              textHeightBehavior:
+                                                  const TextHeightBehavior(
+                                                applyHeightToFirstAscent:
+                                                    false,
+                                                applyHeightToLastDescent:
+                                                    false,
+                                              ),
                                             ),
                                           ),
-                                          if (active == null) ...[
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '向上拖可睇多啲場',
-                                              style: RType.muted(),
-                                            ),
-                                          ],
-                                          const SizedBox(height: 10),
-                                          if (active == null)
-                                            TextField(
-                                              onChanged: (v) => context
-                                                  .read<ParkCatalogCubit>()
-                                                  .setQuery(v),
-                                              style: RType.body(),
-                                              decoration: InputDecoration(
-                                                hintText: '搜尋停車場 / 地區',
-                                                hintStyle: RType.muted(),
-                                                prefixIcon: const Icon(
-                                                  Icons.search_rounded,
-                                                  color: UberColors.muted,
-                                                ),
-                                                filled: true,
-                                                fillColor: UberColors.elevated,
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 12,
-                                                ),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(14),
-                                                  borderSide: BorderSide.none,
-                                                ),
-                                              ),
-                                            ),
                                           if (active != null)
-                                            Align(
-                                              alignment: Alignment.centerRight,
-                                              child: Text(
-                                                '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                                style: RType.muted(),
-                                              ),
+                                            Text(
+                                              '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                              style: RType.muted(),
+                                            )
+                                          else
+                                            Text(
+                                              '${catalog.parks.length} 個',
+                                              style: RType.muted(),
                                             ),
                                         ],
                                       ),
