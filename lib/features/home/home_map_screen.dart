@@ -222,6 +222,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     key: _mapKey,
                     parks: catalog.parks,
                     selectedId: catalog.selectedId,
+                    sheetExtent: _sheetExtent,
                     onSelect: (id) =>
                         context.read<ParkCatalogCubit>().select(id),
                     onUserLocation: (ll) => context

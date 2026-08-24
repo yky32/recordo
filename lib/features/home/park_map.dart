@@ -17,6 +17,8 @@ class ParkMap extends StatefulWidget {
     this.onUserLocation,
     this.onPinMoved,
     this.onLocateState,
+    /// Bottom sheet fraction (0–1) so selected park centers in *visible* map.
+    this.sheetExtent = 0.42,
   });
 
   final List<Park> parks;
@@ -24,8 +26,8 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<String>? onSelect;
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
-  /// locating, error message (null = ok)
   final void Function(bool locating, String? error)? onLocateState;
+  final double sheetExtent;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -39,6 +41,8 @@ class ParkMapState extends State<ParkMap> {
   LatLng? _me;
   bool _locating = false;
   bool _didInitialRecenter = false;
+  bool _programmaticMove = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,13 +62,47 @@ class ParkMapState extends State<ParkMap> {
     super.didUpdateWidget(oldWidget);
     if (widget.selectedId != null &&
         widget.selectedId != oldWidget.selectedId) {
-      final p =
-          widget.parks.where((e) => e.id == widget.selectedId).firstOrNull;
-      if (p != null) {
-        _map.move(LatLng(p.lat, p.lng), _map.camera.zoom.clamp(14.0, 16.5));
-        widget.onPinMoved?.call(LatLng(p.lat, p.lng));
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) centerOnSelected(animated: true);
+      });
+    } else if (widget.selectedId != null &&
+        (widget.sheetExtent - oldWidget.sheetExtent).abs() > 0.04) {
+      // Sheet resized a lot — keep selected park in visible center
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) centerOnSelected(animated: false);
+      });
     }
+  }
+
+  /// Place selected park in the middle of the map area *above* the sheet.
+  void centerOnSelected({bool animated = true}) {
+    final id = widget.selectedId;
+    if (id == null) return;
+    final p = widget.parks.where((e) => e.id == id).firstOrNull;
+    if (p == null) return;
+    _centerOn(LatLng(p.lat, p.lng), zoom: 15.5, animated: animated);
+    widget.onPinMoved?.call(LatLng(p.lat, p.lng));
+  }
+
+  void _centerOn(LatLng ll, {double? zoom, bool animated = true}) {
+    if (!mounted) return;
+    final z = zoom ?? _map.camera.zoom.clamp(14.0, 16.5);
+    final h = MediaQuery.sizeOf(context).height;
+    // Visible map height ≈ (1 - sheet) * H; its midpoint is above screen center.
+    // Offset so target sits in that midpoint (negative Y = up on screen).
+    final sheet = widget.sheetExtent.clamp(0.15, 0.9);
+    final offsetY = -h * sheet / 2;
+    final offset = Offset(0, offsetY);
+
+    _programmaticMove = true;
+    try {
+      _map.move(ll, z, offset: offset);
+    } catch (_) {
+      _map.move(ll, z);
+    }
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      _programmaticMove = false;
+    });
   }
 
   Future<void> locate({bool forceCamera = false}) async {
@@ -134,12 +172,13 @@ class ParkMapState extends State<ParkMap> {
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
-      _map.move(ll, 15);
+      _centerOn(ll, zoom: 15, animated: true);
       widget.onPinMoved?.call(ll);
     }
   }
 
   void _onMapEvent(MapEvent e) {
+    if (_programmaticMove) return;
     if (e is MapEventMoveEnd) {
       widget.onPinMoved?.call(_map.camera.center);
     }
@@ -151,9 +190,9 @@ class ParkMapState extends State<ParkMap> {
       for (final p in widget.parks)
         Marker(
           point: LatLng(p.lat, p.lng),
-          width: p.id == widget.selectedId ? 44 : 36,
-          height: p.id == widget.selectedId ? 44 : 36,
-          alignment: Alignment.topCenter,
+          width: p.id == widget.selectedId ? 52 : 36,
+          height: p.id == widget.selectedId ? 52 : 36,
+          alignment: Alignment.center,
           child: GestureDetector(
             onTap: () => widget.onSelect?.call(p.id),
             child: _ParkPin(selected: p.id == widget.selectedId),
@@ -227,18 +266,33 @@ class _ParkPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = selected ? 40.0 : 32.0;
-    return Container(
+    final s = selected ? 46.0 : 32.0;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
       width: s,
       height: s,
       decoration: BoxDecoration(
         color: selected ? UberColors.accent : UberColors.elevated2,
         shape: BoxShape.circle,
-        border: Border.all(color: UberColors.white.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: selected
+              ? UberColors.white
+              : UberColors.white.withValues(alpha: 0.35),
+          width: selected ? 3 : 1,
+        ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: UberColors.accent.withValues(alpha: 0.45),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
       child: Icon(
         Icons.local_parking_rounded,
-        size: selected ? 20 : 16,
+        size: selected ? 24 : 16,
         color: selected ? UberColors.black : UberColors.white,
       ),
     );
