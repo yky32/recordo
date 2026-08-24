@@ -60,16 +60,12 @@ class ParkMapState extends State<ParkMap> {
   @override
   void didUpdateWidget(covariant ParkMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Only re-center when the *selected park changes* — never when sheet
+    // height changes (that was yanking camera off the user location).
     if (widget.selectedId != null &&
         widget.selectedId != oldWidget.selectedId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) centerOnSelected(animated: true);
-      });
-    } else if (widget.selectedId != null &&
-        (widget.sheetExtent - oldWidget.sheetExtent).abs() > 0.04) {
-      // Sheet resized a lot — keep selected park in visible center
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) centerOnSelected(animated: false);
       });
     }
   }
