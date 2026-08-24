@@ -1,11 +1,13 @@
-# Recordo Fastlane — patterned after ClipVal / Triftly (Flutter + TestFlight).
-# Single target (no Widget/Share). Fastfile lives in ios/fastlane/; project root is ../..
+# Recordo Fastlane — Flutter + TestFlight (+ Live Activity extension).
+# Fastfile lives in ios/fastlane/; project root is ../..
 
 FASTLANE_DIR = File.dirname(__FILE__)
 IOS_DIR = File.expand_path("..", FASTLANE_DIR)
 PROJECT_ROOT = File.expand_path("..", IOS_DIR)
 
 APP_IDENTIFIER = "com.recordo"
+LIVE_ACTIVITY_IDENTIFIER = "com.recordo.RecordoLiveActivity"
+APP_GROUP_IDENTIFIER = "group.com.recordo.live"
 APP_NAME = "Recordo"
 # Same Apple team as ClipVal / Triftly (ASC API + Distribution cert secrets).
 TEAM_ID = ENV["FASTLANE_TEAM_ID"] || "3G34999H3A"
@@ -231,6 +233,15 @@ end
 
 
 def ensure_app_identifier_exists!
+  ensure_bundle_id_exists!(APP_IDENTIFIER, name: APP_NAME)
+  ensure_bundle_id_exists!(
+    LIVE_ACTIVITY_IDENTIFIER,
+    name: "Recordo Live Activity"
+  )
+  enable_app_groups_on_bundle_ids!
+end
+
+def ensure_bundle_id_exists!(identifier, name:)
   params = app_store_connect_api_key_params
   UI.user_error!("ASC API key required to register App ID") unless params
 
@@ -246,22 +257,85 @@ def ensure_app_identifier_exists!
   Spaceship::ConnectAPI.token = token
 
   existing = Spaceship::ConnectAPI::BundleId.all(
-    filter: { identifier: APP_IDENTIFIER },
+    filter: { identifier: identifier },
     limit: 5
   ) rescue []
-  found = Array(existing).any? { |b| b.identifier.to_s == APP_IDENTIFIER }
+  found = Array(existing).any? { |b| b.identifier.to_s == identifier }
   if found
-    UI.success("App ID #{APP_IDENTIFIER} already exists")
+    UI.success("App ID #{identifier} already exists")
     return
   end
 
-  UI.message("Creating App ID #{APP_IDENTIFIER} on Developer Portal...")
+  UI.message("Creating App ID #{identifier} on Developer Portal...")
   Spaceship::ConnectAPI::BundleId.create(
-    name: APP_NAME.gsub(/[^0-9A-Za-z ]/, "")[0, 50],
-    identifier: APP_IDENTIFIER,
+    name: name.gsub(/[^0-9A-Za-z ]/, "")[0, 50],
+    identifier: identifier,
     platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS
   )
-  UI.success("Created App ID #{APP_IDENTIFIER}")
+  UI.success("Created App ID #{identifier}")
+end
+
+# Enable App Groups capability + attach group.com.recordo.live on main + extension.
+def enable_app_groups_on_bundle_ids!
+  params = app_store_connect_api_key_params
+  return unless params
+
+  key_path = File.join(Dir.home, ".appstoreconnect", "api_key.p8")
+  build_app_store_connect_api_key
+  require "spaceship"
+  token = Spaceship::ConnectAPI::Token.create(
+    key_id: params[:key_id],
+    issuer_id: params[:issuer_id],
+    filepath: key_path
+  )
+  Spaceship::ConnectAPI.token = token
+
+  [APP_IDENTIFIER, LIVE_ACTIVITY_IDENTIFIER].each do |identifier|
+    bids = Spaceship::ConnectAPI::BundleId.all(
+      filter: { identifier: identifier },
+      limit: 5
+    ) rescue []
+    bid = Array(bids).find { |b| b.identifier.to_s == identifier }
+    unless bid
+      UI.important("BundleId #{identifier} not found — skip app group enable")
+      next
+    end
+
+    begin
+      # Fetch capabilities (API varies slightly by spaceship version)
+      caps = bid.get_capabilities(filter: {}) rescue nil
+      caps ||= (Spaceship::ConnectAPI.get_bundle_id_capabilities(
+        bundle_id_id: bid.id
+      ).all_pages_each.to_a rescue [])
+
+      has_groups = Array(caps).any? do |c|
+        type = c.respond_to?(:capability_type) ? c.capability_type.to_s : c.to_s
+        type.include?("APP_GROUPS") || type.include?("APP_GROUP")
+      end
+
+      unless has_groups
+        UI.message("Enabling APP_GROUPS on #{identifier}...")
+        begin
+          bid.create_capability(
+            Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
+          )
+        rescue => ex
+          # Some spaceship versions:
+          Spaceship::ConnectAPI::BundleIdCapability.create(
+            bundle_id_id: bid.id,
+            attributes: {
+              capabilityType: "APP_GROUPS"
+            }
+          ) rescue UI.important("create_capability failed for #{identifier}: #{ex.message}")
+        end
+      else
+        UI.success("APP_GROUPS already on #{identifier}")
+      end
+    rescue => ex
+      UI.important("App Groups enable for #{identifier}: #{ex.message}")
+      UI.important("  Portal: Identifiers → #{identifier} → App Groups → #{APP_GROUP_IDENTIFIER}")
+    end
+  end
 end
 
 def fetch_appstore_profile!(app_identifier:, force: false)
@@ -278,6 +352,7 @@ end
 
 def write_ci_export_options_plist!
   profile_name = ENV["SIGH_NAME"]
+  ext_profile = ENV["SIGH_NAME_LIVE_ACTIVITY"] || profile_name
   UI.user_error!("SIGH_NAME is required to export the App Store IPA on CI.") unless profile_name
 
   plist_path = File.join(IOS_DIR, "ExportOptions.ci.plist")
@@ -296,6 +371,8 @@ def write_ci_export_options_plist!
       <dict>
         <key>#{APP_IDENTIFIER}</key>
         <string>#{profile_name}</string>
+        <key>#{LIVE_ACTIVITY_IDENTIFIER}</key>
+        <string>#{ext_profile}</string>
       </dict>
     </dict>
     </plist>
@@ -310,6 +387,7 @@ def persist_ci_signing_env!
 
   File.open(ENV["GITHUB_ENV"], "a") do |file|
     file.puts "SIGH_NAME=#{ENV['SIGH_NAME']}"
+    file.puts "SIGH_NAME_LIVE_ACTIVITY=#{ENV['SIGH_NAME_LIVE_ACTIVITY']}" if ENV["SIGH_NAME_LIVE_ACTIVITY"]
   end
 end
 
@@ -655,6 +733,22 @@ platform :ios do
         targets: ["Runner"]
       )
 
+      # Live Activity extension (optional if profile missing — fail loud)
+      ext_profile = ENV["SIGH_NAME_LIVE_ACTIVITY"]
+      UI.user_error!(
+        "SIGH_NAME_LIVE_ACTIVITY missing. setup_appstore_signing must create profile for #{LIVE_ACTIVITY_IDENTIFIER}"
+      ) if ext_profile.to_s.strip.empty?
+
+      update_code_signing_settings(
+        use_automatic_signing: false,
+        path: "#{IOS_DIR}/Runner.xcodeproj",
+        team_id: TEAM_ID,
+        bundle_identifier: LIVE_ACTIVITY_IDENTIFIER,
+        profile_name: ext_profile,
+        code_sign_identity: "Apple Distribution",
+        targets: ["RecordoLiveActivity"]
+      )
+
       export_plist = write_ci_export_options_plist!
       ver_args = flutter_version_build_args
       git_def = flutter_git_define_args
@@ -828,9 +922,9 @@ platform :ios do
     end
   end
 
-  desc "Setup App Store distribution certificate + profile (Runner only)"
+  desc "Setup App Store distribution certificate + profiles (Runner + Live Activity)"
   lane :setup_appstore_signing do
-    UI.message("🔧 App Store signing for #{APP_IDENTIFIER}...")
+    UI.message("🔧 App Store signing for #{APP_IDENTIFIER} + #{LIVE_ACTIVITY_IDENTIFIER}...")
     api_key_params = app_store_connect_api_key_params
 
     begin
@@ -850,18 +944,31 @@ platform :ios do
           get_certificates(development: false, username: APPLE_ID, team_id: TEAM_ID)
         end
       end
-      UI.message("Getting App Store provisioning profile for #{APP_IDENTIFIER}...")
+      UI.message("Ensuring App IDs + App Groups...")
       ensure_app_identifier_exists!
+
+      UI.message("Getting App Store provisioning profile for #{APP_IDENTIFIER}...")
       main_profile = fetch_appstore_profile!(
         app_identifier: APP_IDENTIFIER,
-        force: ENV["CI"] == "true"
+        force: true # recreate so App Groups entitlement is included
       )
       ENV["SIGH_NAME"] = main_profile
+
+      UI.message("Getting App Store profile for Live Activity #{LIVE_ACTIVITY_IDENTIFIER}...")
+      ext_profile = fetch_appstore_profile!(
+        app_identifier: LIVE_ACTIVITY_IDENTIFIER,
+        force: true
+      )
+      ENV["SIGH_NAME_LIVE_ACTIVITY"] = ext_profile
+
       persist_ci_signing_env!
-      UI.success("✅ Profile ready! SIGH_NAME=#{main_profile}")
+      UI.success("✅ Profiles ready! main=#{main_profile} ext=#{ext_profile}")
     rescue => ex
       UI.important("⚠️  setup failed: #{ex.message}")
-      UI.important("   open ios/Runner.xcworkspace → Signing → team #{TEAM_ID}")
+      UI.important("   Portal checklist:")
+      UI.important("   1) App ID #{APP_IDENTIFIER} → App Groups → #{APP_GROUP_IDENTIFIER}")
+      UI.important("   2) App ID #{LIVE_ACTIVITY_IDENTIFIER} → App Groups → same group")
+      UI.important("   3) Create App Group #{APP_GROUP_IDENTIFIER} if missing")
       raise
     end
   end
