@@ -17,8 +17,10 @@ class ParkMap extends StatefulWidget {
     this.onUserLocation,
     this.onPinMoved,
     this.onLocateState,
-    /// Bottom sheet fraction (0–1) so selected park centers in *visible* map.
-    this.sheetExtent = 0.42,
+    /// Measured px from top of screen to bottom of search chrome.
+    this.padTop = 120,
+    /// Measured px from top of sheet (handle) to bottom of screen.
+    this.padBottom = 360,
   });
 
   final List<Park> parks;
@@ -27,7 +29,8 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
-  final double sheetExtent;
+  final double padTop;
+  final double padBottom;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -60,8 +63,7 @@ class ParkMapState extends State<ParkMap> {
   @override
   void didUpdateWidget(covariant ParkMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Only re-center when the *selected park changes* — never when sheet
-    // height changes (that was yanking camera off the user location).
+    // Only re-center when selection changes — never on sheet drag.
     if (widget.selectedId != null &&
         widget.selectedId != oldWidget.selectedId) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,78 +72,61 @@ class ParkMapState extends State<ParkMap> {
     }
   }
 
-  /// Place selected park in the middle of the map area *above* the sheet.
   void centerOnSelected({bool animated = true}) {
     final id = widget.selectedId;
     if (id == null) return;
     final p = widget.parks.where((e) => e.id == id).firstOrNull;
     if (p == null) return;
-    _centerOn(LatLng(p.lat, p.lng), zoom: 15.5, animated: animated);
-    widget.onPinMoved?.call(LatLng(p.lat, p.lng));
+    _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] on the horizontal mid-line of the *visible* map band
-  /// (search bar bottom → sheet top). Uses CRS project math — not move(offset).
-  void _centerOn(LatLng ll, {double? zoom, bool animated = true}) {
+  /// Place [ll] on the mid-line of the *measured* visible band
+  /// (below search → above sheet handle) via CameraFit padding.
+  void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
     final z = (zoom ?? _map.camera.zoom).clamp(14.0, 16.5);
-    final mq = MediaQuery.of(context);
-    final size = mq.size;
-    final h = size.height;
+    final h = MediaQuery.sizeOf(context).height;
+    final padTop = widget.padTop.clamp(0.0, h * 0.45);
+    final padBottom = widget.padBottom.clamp(0.0, h * 0.85);
+    if (padTop + padBottom >= h - 40) {
+      // Degenerate — plain center
+      _programmaticMove = true;
+      _map.move(ll, z);
+      _clearProg();
+      return;
+    }
 
-    // Match home chrome: SafeArea top + search row (~56) + padding
-    final topChrome = mq.padding.top + 8 + 56 + 8;
-    final sheet = widget.sheetExtent.clamp(0.18, 0.92);
-    final sheetPx = h * sheet;
-    final bandTop = topChrome;
-    final bandBottom = h - sheetPx;
-    final bandH = (bandBottom - bandTop).clamp(100.0, h);
-    // Optical center = mid of visible band (user's red horizontal line)
-    final targetY = bandTop + bandH * 0.5;
-
+    _programmaticMove = true;
     try {
-      final cam = _map.camera;
-      // Pixel of target latlng at desired zoom
-      final projected = cam.projectAtZoom(ll, z);
-      // We want that pixel drawn at screen Y = targetY (X = center).
-      // Screen mid is (w/2, h/2). Delta from mid to target on screen:
-      //   dy = targetY - h/2  (negative ⇒ above geometric center)
-      // Map center's projected pixel should be:
-      //   project(ll) - (0, dy)  so ll appears at mid + dy
-      final dy = targetY - h / 2;
-      final newCenterPix = Offset(projected.dx, projected.dy - dy);
-      final newCenter = cam.unprojectAtZoom(newCenterPix, z);
-
-      _programmaticMove = true;
-      _map.move(newCenter, z);
-      Future<void>.delayed(const Duration(milliseconds: 120), () {
-        _programmaticMove = false;
-      });
-    } catch (_) {
-      // Fallback: CameraFit with padding = non-map chrome
-      _programmaticMove = true;
+      // Official path: point sits in center of area after vertical padding.
       _map.fitCamera(
         CameraFit.coordinates(
           coordinates: [ll],
-          padding: EdgeInsets.only(top: topChrome, bottom: sheetPx),
+          padding: EdgeInsets.only(top: padTop, bottom: padBottom),
           maxZoom: z,
           minZoom: z,
         ),
       );
-      Future<void>.delayed(const Duration(milliseconds: 120), () {
-        _programmaticMove = false;
-      });
+    } catch (_) {
+      _map.move(ll, z);
     }
+    _clearProg();
   }
 
-  /// Public: re-center on user (locate button).
+  void _clearProg() {
+    Future<void>.delayed(const Duration(milliseconds: 150), () {
+      _programmaticMove = false;
+    });
+  }
+
+  /// Locate button / public API.
   void centerOnMe({bool animated = true}) {
     final me = _me;
     if (me == null) {
       locate(forceCamera: true);
       return;
     }
-    _centerOn(me, zoom: 15.2, animated: animated);
+    _centerOn(me, zoom: 15.2);
   }
 
   Future<void> locate({bool forceCamera = false}) async {
@@ -211,7 +196,10 @@ class ParkMapState extends State<ParkMap> {
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
-      _centerOn(ll, zoom: 15.2, animated: true);
+      // Wait one frame so padTop/padBottom from measured keys are current.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _centerOn(ll, zoom: 15.2);
+      });
     }
   }
 
