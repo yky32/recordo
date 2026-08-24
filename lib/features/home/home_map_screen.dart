@@ -49,6 +49,34 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     }
   }
 
+  void _dragSheetBy(double deltaDy, double screenHeight) {
+    if (!_sheetCtrl.isAttached || screenHeight <= 0) return;
+    // Finger up → sheet grows
+    final next =
+        (_sheetCtrl.size - deltaDy / screenHeight).clamp(_sheetMin, _sheetMax);
+    _sheetCtrl.jumpTo(next);
+  }
+
+  void _snapSheet() {
+    if (!_sheetCtrl.isAttached) return;
+    const snaps = [_sheetMin, _sheetInit, 0.65, _sheetMax];
+    final s = _sheetCtrl.size;
+    var best = snaps.first;
+    var bestD = (s - best).abs();
+    for (final n in snaps) {
+      final d = (s - n).abs();
+      if (d < bestD) {
+        best = n;
+        bestD = d;
+      }
+    }
+    _sheetCtrl.animateTo(
+      best,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   @override
   void dispose() {
     _sheetCtrl.removeListener(_onSheet);
@@ -315,6 +343,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       snap: true,
                       snapSizes: const [_sheetMin, _sheetInit, 0.65, _sheetMax],
                       builder: (context, scrollController) {
+                        final screenH = MediaQuery.sizeOf(context).height;
                         return Material(
                           color: UberColors.sheet,
                           elevation: 12,
@@ -324,53 +353,62 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                           clipBehavior: Clip.antiAlias,
                           child: Column(
                             children: [
-                              // drag handle
+                              // Handle + title: vertical drag adjusts sheet height
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
-                                onTap: () {},
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(0, 10, 0, 4),
-                                  child: Center(
-                                    child: Container(
-                                      width: 40,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: UberColors.hairline,
-                                        borderRadius:
-                                            BorderRadius.circular(99),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // sticky title
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                                child: Row(
+                                onVerticalDragUpdate: (d) =>
+                                    _dragSheetBy(d.delta.dy, screenH),
+                                onVerticalDragEnd: (_) => _snapSheet(),
+                                child: Column(
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        active == null ? '附近停車場' : '泊緊',
-                                        style: RType.title(),
-                                        textHeightBehavior:
-                                            const TextHeightBehavior(
-                                          applyHeightToFirstAscent: false,
-                                          applyHeightToLastDescent: false,
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          0, 12, 0, 8),
+                                      child: Center(
+                                        child: Container(
+                                          width: 44,
+                                          height: 5,
+                                          decoration: BoxDecoration(
+                                            color: UberColors.hairline,
+                                            borderRadius:
+                                                BorderRadius.circular(99),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                    if (active != null)
-                                      Text(
-                                        '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                        style: RType.muted(),
-                                      )
-                                    else
-                                      Text(
-                                        '${catalog.parks.length} 個',
-                                        style: RType.muted(),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          20, 0, 20, 10),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              active == null
+                                                  ? '附近停車場'
+                                                  : '泊緊',
+                                              style: RType.title(),
+                                              textHeightBehavior:
+                                                  const TextHeightBehavior(
+                                                applyHeightToFirstAscent:
+                                                    false,
+                                                applyHeightToLastDescent:
+                                                    false,
+                                              ),
+                                            ),
+                                          ),
+                                          if (active != null)
+                                            Text(
+                                              '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                              style: RType.muted(),
+                                            )
+                                          else
+                                            Text(
+                                              '${catalog.parks.length} 個',
+                                              style: RType.muted(),
+                                            ),
+                                        ],
                                       ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -464,7 +502,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                   ),
                                 )
                               else
-                                // keep home indicator breathing room when no CTA
                                 SizedBox(height: 8 + bottomInset),
                             ],
                           ),
