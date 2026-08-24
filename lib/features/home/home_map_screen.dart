@@ -27,8 +27,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   final _sheetCtrl = DraggableScrollableController();
   double _sheetExtent = 0.42;
   bool _locating = false;
-  double _padTop = 120;
-  double _padBottom = 360;
+  double _bandTopY = 120;
+  double _bandBottomY = 500;
 
   static const _sheetMin = 0.20;
   static const _sheetInit = 0.42;
@@ -55,38 +55,40 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     }
   }
 
-  /// Real pixels from layout: search bottom + sheet top (handle).
+  /// Dynamic: search bar bottom Y + sheet top Y (the two red lines).
   void _measureChrome() {
     if (!mounted) return;
     final h = MediaQuery.sizeOf(context).height;
-    var padTop = _padTop;
-    var padBottom = _padBottom;
+    var topY = _bandTopY;
+    var bottomY = _bandBottomY;
 
     final searchBox =
         _searchKey.currentContext?.findRenderObject() as RenderBox?;
     if (searchBox != null && searchBox.hasSize) {
       final origin = searchBox.localToGlobal(Offset.zero);
-      // Bottom edge of search row + small gap under bar
-      padTop = origin.dy + searchBox.size.height + 4;
+      topY = origin.dy + searchBox.size.height;
     }
 
     final sheetBox =
         _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (sheetBox != null && sheetBox.hasSize) {
-      // Top of sheet Material = grabber / handle band
-      final sheetTop = sheetBox.localToGlobal(Offset.zero).dy;
-      padBottom = (h - sheetTop).clamp(100.0, h * 0.92);
+      bottomY = sheetBox.localToGlobal(Offset.zero).dy;
     } else if (_sheetCtrl.isAttached) {
-      padBottom = h * _sheetCtrl.size;
+      bottomY = h * (1.0 - _sheetCtrl.size);
     } else {
-      padBottom = h * _sheetExtent;
+      bottomY = h * (1.0 - _sheetExtent);
     }
 
-    if ((padTop - _padTop).abs() > 0.5 ||
-        (padBottom - _padBottom).abs() > 0.5) {
+    // sanity
+    if (bottomY < topY + 80) {
+      bottomY = (topY + h * 0.35).clamp(topY + 80, h);
+    }
+
+    if ((topY - _bandTopY).abs() > 0.5 ||
+        (bottomY - _bandBottomY).abs() > 0.5) {
       setState(() {
-        _padTop = padTop;
-        _padBottom = padBottom;
+        _bandTopY = topY;
+        _bandBottomY = bottomY;
       });
     }
   }
@@ -269,8 +271,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     key: _mapKey,
                     parks: catalog.parks,
                     selectedId: catalog.selectedId,
-                    padTop: _padTop,
-                    padBottom: _padBottom,
+                    bandTopY: _bandTopY,
+                    bandBottomY: _bandBottomY,
                     onSelect: (id) {
                       hideKeyboard();
                       context.read<ParkCatalogCubit>().select(id);

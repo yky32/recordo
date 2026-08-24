@@ -18,10 +18,10 @@ class ParkMap extends StatefulWidget {
     this.onPinMoved,
     this.onLocateState,
     this.onMapInteraction,
-    /// Measured px from top of screen to bottom of search chrome.
-    this.padTop = 120,
-    /// Measured px from top of sheet (handle) to bottom of screen.
-    this.padBottom = 360,
+    /// Screen Y of search bar bottom (top red line).
+    this.bandTopY = 120,
+    /// Screen Y of sheet top / handle (bottom red line).
+    this.bandBottomY = 500,
   });
 
   final List<Park> parks;
@@ -30,10 +30,9 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
-  /// Tap / drag map — parent dismisses keyboard.
   final VoidCallback? onMapInteraction;
-  final double padTop;
-  final double padBottom;
+  final double bandTopY;
+  final double bandBottomY;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -83,42 +82,58 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] on mid-line of visible band (search bottom → sheet top).
-  ///
-  /// flutter_map `move` offset: **positive Y places the point LOWER** on screen
-  /// (docs + moveRaw: center = unproject(point - offset)).
-  /// So offset.dy = targetY - screenMidY.
+  /// Place [ll] exactly mid-way between search bottom and sheet top
+  /// (the two red lines). Always re-reads [bandTopY]/[bandBottomY] — dynamic.
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
-    final z = (zoom ?? 15.2).clamp(14.0, 16.5);
+    final z = (zoom ?? 15.5).clamp(14.0, 16.5);
     final size = MediaQuery.sizeOf(context);
     final h = size.height;
 
-    var padTop = widget.padTop.clamp(48.0, h * 0.4);
-    var padBottom = widget.padBottom.clamp(80.0, h * 0.78);
-
-    // Keep a usable open band so the point never lands under the sheet.
-    const minOpen = 200.0;
-    if (h - padTop - padBottom < minOpen) {
-      padBottom = (h - padTop - minOpen).clamp(80.0, h * 0.7);
+    // Live band from parent layout measure
+    var top = widget.bandTopY;
+    var bottom = widget.bandBottomY;
+    if (bottom <= top + 80) {
+      // Fallback if measure not ready
+      top = h * 0.14;
+      bottom = h * 0.55;
     }
+    top = top.clamp(0.0, h * 0.5);
+    bottom = bottom.clamp(top + 100, h);
 
-    final open = (h - padTop - padBottom).clamp(minOpen * 0.5, h);
-    // Optical target: slightly above true mid of visible band
-    // (dogfood: mid still sat low near sheet — nudge ~12% of band up)
-    final targetY = padTop + open * 0.38;
-    // Correct sign: target above geometric mid → negative dy → point higher
-    final offset = Offset(0, targetY - h / 2);
+    // True midpoint of the two red lines
+    final midY = (top + bottom) / 2;
 
     _programmaticMove = true;
     try {
-      final moved = _map.move(ll, z, offset: offset);
-      if (!moved) {
-        // Still force a plain center so blue is never lost off-world
-        _map.move(ll, z);
+      // 1) Prefer CameraFit: pads = chrome outside the visible band
+      final fitOk = _map.fitCamera(
+        CameraFit.coordinates(
+          coordinates: [ll],
+          padding: EdgeInsets.only(top: top, bottom: h - bottom),
+          maxZoom: z,
+          minZoom: z,
+        ),
+      );
+      if (!fitOk) {
+        // 2) move + offset — flutter_map: +offset.y moves point DOWN on screen
+        //    so offset.y = midY - (h/2) places [ll] at midY.
+        _map.move(ll, z, offset: Offset(0, midY - h / 2));
       }
     } catch (_) {
-      _map.move(ll, z);
+      try {
+        final cam = _map.camera;
+        final projected = cam.projectAtZoom(ll, z);
+        // Screen center is (w/2, h/2). We want ll at (w/2, midY).
+        // center_pixel = point_pixel - (screen_point - screen_center)
+        // screen_point - screen_center = (0, midY - h/2)
+        final delta = Offset(0, midY - h / 2);
+        final newCenter =
+            cam.unprojectAtZoom(projected - delta, z);
+        _map.move(newCenter, z);
+      } catch (_) {
+        _map.move(ll, z);
+      }
     }
     _clearProg();
   }
@@ -210,7 +225,7 @@ class ParkMapState extends State<ParkMap> {
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
-      // Wait one frame so padTop/padBottom from measured keys are current.
+      // Wait one frame so band measure is current.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _centerOn(ll, zoom: 15.2);
       });
