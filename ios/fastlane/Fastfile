@@ -341,13 +341,20 @@ end
 def fetch_appstore_profile!(app_identifier:, force: false)
   api_key = build_app_store_connect_api_key
   UI.user_error!("ASC API key required for provisioning profile on CI") if api_key.nil? && ENV["CI"]
+  # Clear so we don't leak previous identifier's SIGH_NAME
+  ENV.delete("SIGH_NAME")
+  ENV.delete("SIGH_UUID")
+  ENV.delete("SIGH_PROFILE_PATH")
   get_provisioning_profile(
     app_identifier: app_identifier,
     team_id: TEAM_ID,
     force: force,
     api_key: api_key
   )
-  ENV["SIGH_NAME"]
+  name = ENV["SIGH_NAME"].to_s
+  UI.user_error!("sigh did not set SIGH_NAME for #{app_identifier}") if name.empty?
+  UI.message("Profile for #{app_identifier}: #{name}")
+  name
 end
 
 def write_ci_export_options_plist!
@@ -959,6 +966,8 @@ platform :ios do
         app_identifier: LIVE_ACTIVITY_IDENTIFIER,
         force: true
       )
+      # fetch_* overwrites ENV["SIGH_NAME"] — restore main
+      ENV["SIGH_NAME"] = main_profile
       ENV["SIGH_NAME_LIVE_ACTIVITY"] = ext_profile
 
       persist_ci_signing_env!

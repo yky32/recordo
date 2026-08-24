@@ -2,9 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.com.recordo.live</string>
-	</array>
+	<!-- App Groups (group.com.recordo.live) — enable in Apple Developer
+	     Identifiers for com.recordo + com.recordo.RecordoLiveActivity, then
+	     restore:
+	     <key>com.apple.security.application-groups</key>
+	     <array><string>group.com.recordo.live</string></array>
+	     Until then CI profiles sign without App Groups. Live Activity data
+	     sharing needs the group; UI can still be wired after portal setup. -->
 </dict>
 </plist>
