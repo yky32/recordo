@@ -5,6 +5,7 @@ import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
+import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uber-style settings hub.
@@ -274,6 +275,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(width: 14),
                     Expanded(child: Text('版本', style: RType.body())),
                     Text('1.0.0', style: RType.muted()),
+                  ],
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_outlined,
+                      color: RecordoSupabase.isReady
+                          ? UberColors.accent
+                          : UberColors.muted,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(child: Text('雲端 UGC', style: RType.body())),
+                    Text(
+                      RecordoSupabase.isReady ? 'Supabase 已連' : '本機 only',
+                      style: RType.muted(),
+                    ),
                   ],
                 ),
               ),

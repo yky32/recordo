@@ -5,17 +5,40 @@ import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/supabase_park_remote.dart';
 
-/// Parks = OSM skeleton (bundled) + curated seed (prices) + local UGC.
-/// Prices never come from OSM — UGC / seed only.
+/// Parks = OSM skeleton + seed prices + local UGC + optional Supabase UGC.
 class ParkRepository {
+  ParkRepository({SupabaseParkRemote? remote})
+      : _remote = remote ?? SupabaseParkRemote();
+
+  final SupabaseParkRemote _remote;
+
   List<Park>? _osmCache;
   List<Park>? _mergedBase;
+  Map<String, RemoteParkPrice> _remotePrices = {};
+  List<Park> _remoteUgcParks = const [];
 
   Future<void> ensureLoaded() async {
-    if (_mergedBase != null) return;
-    final osm = await _loadOsm();
-    _mergedBase = _mergeSeedOverOsm(osm, hkSeedParks);
+    if (_mergedBase == null) {
+      final osm = await _loadOsm();
+      _mergedBase = _mergeSeedOverOsm(osm, hkSeedParks);
+    }
+    // Best-effort pull shared UGC
+    try {
+      final prices = await _remote.fetchPrices();
+      final remoteParks = await _remote.fetchUgcParks();
+      _remotePrices = prices;
+      _remoteUgcParks = remoteParks;
+    } catch (_) {}
+  }
+
+  /// Force refresh remote UGC (e.g. pull-to-refresh later).
+  Future<void> refreshRemote() async {
+    try {
+      _remotePrices = await _remote.fetchPrices();
+      _remoteUgcParks = await _remote.fetchUgcParks();
+    } catch (_) {}
   }
 
   Future<List<Park>> _loadOsm() async {
@@ -43,7 +66,6 @@ class ParkRepository {
     return _osmCache!;
   }
 
-  /// Prefer curated seed name/price when within ~90m of an OSM pin.
   List<Park> _mergeSeedOverOsm(List<Park> osm, List<Park> seeds) {
     final usedOsm = <int>{};
     final out = <Park>[];
@@ -54,7 +76,7 @@ class ParkRepository {
       for (var i = 0; i < osm.length; i++) {
         if (usedOsm.contains(i)) continue;
         final o = osm[i];
-        final d = _approxM(s.lat, s.lng, o.lat, o.lng);
+        final d = _approxM2(s.lat, s.lng, o.lat, o.lng);
         if (d < bestD) {
           bestD = d;
           bestI = i;
@@ -63,7 +85,6 @@ class ParkRepository {
       if (bestI >= 0 && bestD < 90 * 90) {
         usedOsm.add(bestI);
         final o = osm[bestI];
-        // Keep OSM id for stable UGC later, but seed brand name + prices
         out.add(
           Park(
             id: o.id,
@@ -91,13 +112,13 @@ class ParkRepository {
     return out;
   }
 
-  static double _approxM(double lat1, double lng1, double lat2, double lng2) {
+  static double _approxM2(double lat1, double lng1, double lat2, double lng2) {
     final dLat = (lat1 - lat2) * 111000;
-    final dLng = (lng1 - lng2) * 111000 * 0.92; // HK ~22°
-    return dLat * dLat + dLng * dLng; // compare squared; 90m²=8100
+    final dLng = (lng1 - lng2) * 111000 * 0.92;
+    return dLat * dLat + dLng * dLng;
   }
 
-  List<Park> _ugcNewParks() {
+  List<Park> _localUgcNewParks() {
     final list = Bootstrap.store.getJsonList(StorageKeys.ugcNewParks);
     return list.map((m) {
       return Park(
@@ -119,41 +140,74 @@ class ParkRepository {
     }).toList();
   }
 
-  /// Sync after [ensureLoaded]. Applies UGC price overlay.
+  Park _applyPrices(Park p) {
+    final local = Bootstrap.store.getJsonMap(StorageKeys.ugcPrices);
+    final localRaw = local?[p.id];
+    final remote = _remotePrices[p.id];
+
+    double? hourly = p.hourlyHkd;
+    double? daily = p.dailyHkd;
+    double? night = p.nightHkd;
+    var confirms = p.ugcConfirms;
+    DateTime? updated = p.priceUpdatedAt;
+    var source = p.source;
+
+    // Local wins if newer or only local
+    if (localRaw is Map) {
+      final m = Map<String, dynamic>.from(localRaw);
+      hourly = (m['hourlyHkd'] as num?)?.toDouble() ?? hourly;
+      daily = (m['dailyHkd'] as num?)?.toDouble() ?? daily;
+      night = (m['nightHkd'] as num?)?.toDouble() ?? night;
+      confirms = m['ugcConfirms'] as int? ?? confirms;
+      updated = m['priceUpdatedAt'] != null
+          ? DateTime.tryParse(m['priceUpdatedAt'] as String) ?? updated
+          : updated;
+      source = p.source.startsWith('ugc') ? p.source : 'ugc';
+    }
+
+    // Remote fills gaps / older — prefer remote if newer than local
+    if (remote != null) {
+      final localTs = updated;
+      final remoteTs = remote.updatedAt;
+      final remoteNewer = remoteTs != null &&
+          (localTs == null || remoteTs.isAfter(localTs));
+      if (remoteNewer || localRaw is! Map) {
+        hourly = remote.hourly ?? hourly;
+        daily = remote.daily ?? daily;
+        night = remote.night ?? night;
+        confirms = remote.confirms;
+        updated = remote.updatedAt ?? updated;
+        source = 'ugc-remote';
+      } else {
+        // still take higher confirm count
+        if (remote.confirms > confirms) confirms = remote.confirms;
+      }
+    }
+
+    return p.copyWith(
+      hourlyHkd: hourly,
+      dailyHkd: daily,
+      nightHkd: night,
+      ugcConfirms: confirms,
+      priceUpdatedAt: updated,
+      source: source,
+    );
+  }
+
   List<Park> allWithUgc() {
     final base = _mergedBase ?? List<Park>.from(hkSeedParks);
-    final ugc = Bootstrap.store.getJsonMap(StorageKeys.ugcPrices) ?? {};
-    final priced = base.map((p) {
-      final raw = ugc[p.id];
-      if (raw is! Map) return p;
-      final m = Map<String, dynamic>.from(raw);
-      return p.copyWith(
-        hourlyHkd: (m['hourlyHkd'] as num?)?.toDouble() ?? p.hourlyHkd,
-        dailyHkd: (m['dailyHkd'] as num?)?.toDouble() ?? p.dailyHkd,
-        nightHkd: (m['nightHkd'] as num?)?.toDouble() ?? p.nightHkd,
-        ugcConfirms: m['ugcConfirms'] as int? ?? p.ugcConfirms,
-        priceUpdatedAt: m['priceUpdatedAt'] != null
-            ? DateTime.tryParse(m['priceUpdatedAt'] as String)
-            : p.priceUpdatedAt,
-        source: p.source.startsWith('ugc') ? p.source : 'ugc',
-      );
-    });
-    final news = _ugcNewParks().map((p) {
-      final raw = ugc[p.id];
-      if (raw is! Map) return p;
-      final m = Map<String, dynamic>.from(raw);
-      return p.copyWith(
-        hourlyHkd: (m['hourlyHkd'] as num?)?.toDouble() ?? p.hourlyHkd,
-        dailyHkd: (m['dailyHkd'] as num?)?.toDouble() ?? p.dailyHkd,
-        nightHkd: (m['nightHkd'] as num?)?.toDouble() ?? p.nightHkd,
-        ugcConfirms: m['ugcConfirms'] as int? ?? p.ugcConfirms,
-        priceUpdatedAt: m['priceUpdatedAt'] != null
-            ? DateTime.tryParse(m['priceUpdatedAt'] as String)
-            : p.priceUpdatedAt,
-        source: 'ugc-new',
-      );
-    });
-    return [...priced, ...news];
+    final localNews = _localUgcNewParks();
+    final remoteIds = _remoteUgcParks.map((e) => e.id).toSet();
+    final localOnly =
+        localNews.where((p) => !remoteIds.contains(p.id)).toList();
+    final combined = [...base, ..._remoteUgcParks, ...localOnly];
+    // Dedupe by id (prefer first)
+    final seen = <String>{};
+    final unique = <Park>[];
+    for (final p in combined) {
+      if (seen.add(p.id)) unique.add(p);
+    }
+    return unique.map(_applyPrices).toList();
   }
 
   Park? byId(String id) {
@@ -171,6 +225,7 @@ class ParkRepository {
     double? night,
     bool confirmOnly = false,
   }) async {
+    // 1) Always local (offline OK)
     final map = Map<String, dynamic>.from(
       Bootstrap.store.getJsonMap(StorageKeys.ugcPrices) ?? {},
     );
@@ -187,6 +242,15 @@ class ParkRepository {
       'confirmOnly': confirmOnly,
     };
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, map);
+
+    // 2) Best-effort Supabase
+    await _remote.insertPriceReport(
+      parkId: parkId,
+      hourly: hourly ?? (existing['hourlyHkd'] as num?)?.toDouble(),
+      daily: daily ?? (existing['dailyHkd'] as num?)?.toDouble(),
+      night: night ?? (existing['nightHkd'] as num?)?.toDouble(),
+      confirmOnly: confirmOnly,
+    );
   }
 
   Future<Park> reportNewPark({
@@ -203,7 +267,7 @@ class ParkRepository {
   }) async {
     final id =
         'ugc-${DateTime.now().millisecondsSinceEpoch}-${name.hashCode.abs()}';
-    final park = {
+    final parkMap = {
       'id': id,
       'name': name,
       'district': district,
@@ -219,8 +283,25 @@ class ParkRepository {
       'priceUpdatedAt': DateTime.now().toUtc().toIso8601String(),
     };
     final list = Bootstrap.store.getJsonList(StorageKeys.ugcNewParks);
-    list.insert(0, park);
+    list.insert(0, parkMap);
     await Bootstrap.store.setJson(StorageKeys.ugcNewParks, list);
+
+    final park = Park(
+      id: id,
+      name: name,
+      district: district,
+      lat: (parkMap['lat'] as num).toDouble(),
+      lng: (parkMap['lng'] as num).toDouble(),
+      hourlyHkd: hourly,
+      dailyHkd: daily,
+      nightHkd: night,
+      heightM: heightM,
+      ugcConfirms: 1,
+      priceUpdatedAt: DateTime.now(),
+      source: 'ugc-new',
+    );
+
+    await _remote.insertUgcPark(park, note: note, address: address);
 
     if (hourly != null || daily != null || night != null) {
       await reportPrice(
@@ -231,7 +312,7 @@ class ParkRepository {
       );
     }
 
-    return byId(id)!;
+    return byId(id) ?? park;
   }
 
   int get osmCount => _osmCache?.length ?? 0;

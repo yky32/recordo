@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/app/app.dart';
 import 'package:recordo/core/bootstrap.dart';
+import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -19,6 +20,7 @@ Future<void> main() async {
     ),
   );
   await Bootstrap.init();
+  await RecordoSupabase.init(); // no-op without dart-defines
   runApp(
     MultiBlocProvider(
       providers: [
