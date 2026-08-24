@@ -80,25 +80,38 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] on the mid-line of the *measured* visible band
-  /// (below search → above sheet handle) via CameraFit padding.
+  /// Place [ll] on the optical mid-line of the measured visible band
+  /// (search bottom → sheet handle top).
+  ///
+  /// Dogfood (TF 26–28): pure mid still sat **low** (below red crosshair).
+  /// Bias ~14% of band **up** toward search so blue/pin hits the crosshair.
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
     final z = (zoom ?? _map.camera.zoom).clamp(14.0, 16.5);
     final h = MediaQuery.sizeOf(context).height;
-    final padTop = widget.padTop.clamp(0.0, h * 0.45);
-    final padBottom = widget.padBottom.clamp(0.0, h * 0.85);
-    if (padTop + padBottom >= h - 40) {
-      // Degenerate — plain center
+    var padTop = widget.padTop.clamp(0.0, h * 0.45);
+    var padBottom = widget.padBottom.clamp(0.0, h * 0.85);
+
+    final open = h - padTop - padBottom;
+    if (open < 80) {
       _programmaticMove = true;
       _map.move(ll, z);
       _clearProg();
       return;
     }
 
+    // Shift optical target UP (smaller screen Y): increase bottom pad.
+    // 0.14 ≈ gap between true mid and user's red line on device shots.
+    const biasFrac = 0.14;
+    final shiftUp = open * biasFrac;
+    padBottom = (padBottom + shiftUp).clamp(0.0, h * 0.9);
+    // keep top stable so band still starts under search
+    if (padTop + padBottom >= h - 48) {
+      padBottom = (h - 48 - padTop).clamp(0.0, h);
+    }
+
     _programmaticMove = true;
     try {
-      // Official path: point sits in center of area after vertical padding.
       _map.fitCamera(
         CameraFit.coordinates(
           coordinates: [ll],
@@ -108,7 +121,19 @@ class ParkMapState extends State<ParkMap> {
         ),
       );
     } catch (_) {
-      _map.move(ll, z);
+      // Fallback project math (screen Y down)
+      try {
+        final cam = _map.camera;
+        final projected = cam.projectAtZoom(ll, z);
+        final targetY = padTop + (h - padTop - padBottom) * 0.5;
+        final dy = targetY - h / 2; // negative ⇒ above geometric center
+        // CRS y ≈ screen y: center pixel = point - dy
+        final newCenter =
+            cam.unprojectAtZoom(Offset(projected.dx, projected.dy - dy), z);
+        _map.move(newCenter, z);
+      } catch (_) {
+        _map.move(ll, z);
+      }
     }
     _clearProg();
   }
