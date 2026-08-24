@@ -21,6 +21,14 @@ class HomeMapScreen extends StatefulWidget {
 
 class _HomeMapScreenState extends State<HomeMapScreen> {
   Timer? _tick;
+  final _mapKey = GlobalKey<ParkMapState>();
+  final _sheetCtrl = DraggableScrollableController();
+  double _sheetExtent = 0.42;
+  bool _locating = false;
+
+  static const _sheetMin = 0.20;
+  static const _sheetInit = 0.42;
+  static const _sheetMax = 0.88;
 
   @override
   void initState() {
@@ -30,10 +38,21 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
         setState(() {});
       }
     });
+    _sheetCtrl.addListener(_onSheet);
+  }
+
+  void _onSheet() {
+    if (!_sheetCtrl.isAttached) return;
+    final s = _sheetCtrl.size;
+    if ((s - _sheetExtent).abs() > 0.008) {
+      setState(() => _sheetExtent = s);
+    }
   }
 
   @override
   void dispose() {
+    _sheetCtrl.removeListener(_onSheet);
+    _sheetCtrl.dispose();
     _tick?.cancel();
     super.dispose();
   }
@@ -154,7 +173,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final screenH = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
       body: BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
@@ -163,11 +183,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
             builder: (context, session) {
               final active = session.active;
               final selected = catalog.selected;
+              // Locate FAB sits just above sheet top
+              final sheetH = screenH * _sheetExtent;
+              final locateBottom = sheetH + 12;
 
               return Stack(
                 fit: StackFit.expand,
                 children: [
                   ParkMap(
+                    key: _mapKey,
                     parks: catalog.parks,
                     selectedId: catalog.selectedId,
                     onSelect: (id) =>
@@ -178,8 +202,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     onPinMoved: (ll) => context
                         .read<ParkCatalogCubit>()
                         .setPin(ll.latitude, ll.longitude),
+                    onLocateState: (locating, err) {
+                      if (!mounted) return;
+                      setState(() => _locating = locating);
+                      if (err != null && err.isNotEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(err)),
+                        );
+                      }
+                    },
                   ),
-                  // top chrome
                   SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -207,163 +239,226 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         parkName: active.parkName ?? selected?.name,
                       ),
                     ),
-                  // bottom sheet-ish panel
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      width: double.infinity,
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.sizeOf(context).height * 0.52,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: UberColors.sheet,
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(28),
+                  // Locate — always above sheet
+                  Positioned(
+                    right: 16,
+                    bottom: locateBottom,
+                    child: Material(
+                      color: UberColors.sheet.withValues(alpha: 0.95),
+                      shape: const CircleBorder(),
+                      elevation: 4,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _locating
+                            ? null
+                            : () => _mapKey.currentState
+                                ?.locate(forceCamera: true),
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: _locating
+                              ? const Padding(
+                                  padding: EdgeInsets.all(14),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: UberColors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.my_location_rounded,
+                                  color: UberColors.white,
+                                ),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black54,
-                            blurRadius: 24,
-                            offset: Offset(0, -8),
-                          ),
-                        ],
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(height: 10),
-                          Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: UberColors.hairline,
-                              borderRadius: BorderRadius.circular(99),
-                            ),
+                    ),
+                  ),
+                  // Draggable bottom sheet
+                  NotificationListener<DraggableScrollableNotification>(
+                    onNotification: (n) {
+                      if ((n.extent - _sheetExtent).abs() > 0.005) {
+                        setState(() => _sheetExtent = n.extent);
+                      }
+                      return false;
+                    },
+                    child: DraggableScrollableSheet(
+                      controller: _sheetCtrl,
+                      initialChildSize: _sheetInit,
+                      minChildSize: _sheetMin,
+                      maxChildSize: _sheetMax,
+                      snap: true,
+                      snapSizes: const [_sheetMin, _sheetInit, 0.65, _sheetMax],
+                      builder: (context, scrollController) {
+                        return Material(
+                          color: UberColors.sheet,
+                          elevation: 12,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(28),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  active == null ? '附近停車場' : '泊緊',
-                                  style: RType.title(),
-                                  textHeightBehavior:
-                                      const TextHeightBehavior(
-                                    applyHeightToFirstAscent: false,
-                                    applyHeightToLastDescent: false,
-                                  ),
-                                ),
-                                if (active == null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '地圖中間大頭釘 · 附近場會按距離排',
-                                    style: RType.muted(),
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                if (active == null)
-                                  TextField(
-                                    onChanged: (v) => context
-                                        .read<ParkCatalogCubit>()
-                                        .setQuery(v),
-                                    style: RType.body(),
-                                    decoration: InputDecoration(
-                                      hintText: '搜尋停車場 / 地區',
-                                      hintStyle: RType.muted(),
-                                      prefixIcon: const Icon(
-                                        Icons.search_rounded,
-                                        color: UberColors.muted,
-                                      ),
-                                      filled: true,
-                                      fillColor: UberColors.elevated,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 12,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide.none,
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            children: [
+                              // drag handle
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {},
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
+                                  child: Center(
+                                    child: Container(
+                                      width: 40,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: UberColors.hairline,
+                                        borderRadius: BorderRadius.circular(99),
                                       ),
                                     ),
                                   ),
-                                if (active != null)
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                      style: RType.muted(),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (selected != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                              child: _SelectedCard(
-                                park: selected,
-                                distance: ParkCatalogCubit.formatDistance(
-                                  context
-                                      .read<ParkCatalogCubit>()
-                                      .distanceMeters(selected),
                                 ),
-                                onOpen: () =>
-                                    context.push('/park/${selected.id}'),
                               ),
-                            ),
-                          Flexible(
-                            child: ListView.separated(
-                              shrinkWrap: true,
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                              itemCount: catalog.parks.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 8),
-                              itemBuilder: (context, i) {
-                                final p = catalog.parks[i];
-                                final on = p.id == catalog.selectedId;
-                                final dm = context
-                                    .read<ParkCatalogCubit>()
-                                    .distanceMeters(p);
-                                return _ParkTile(
-                                  park: p,
-                                  selected: on,
-                                  distance:
-                                      ParkCatalogCubit.formatDistance(dm),
-                                  onTap: () => context
-                                      .read<ParkCatalogCubit>()
-                                      .select(p.id),
-                                );
-                              },
-                            ),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(16, 4, 16, 12 + bottom),
-                            child: active == null
-                                ? SlideToUnlock(
-                                    label: '右滑開始計時',
-                                    accent: UberColors.white,
-                                    thumbColor: UberColors.black,
-                                    onCompleted: () async {
-                                      final p = catalog.selected;
-                                      await context.read<SessionCubit>().start(
-                                            parkId: p?.id,
-                                            parkName: p?.name,
-                                          );
-                                      HapticFeedback.heavyImpact();
-                                    },
-                                  )
-                                : SlideToUnlock(
-                                    label: '右滑結束 · 填收費',
-                                    accent: UberColors.accent,
-                                    thumbColor: UberColors.black,
-                                    trackColor: const Color(0xFF0A2A1A),
-                                    onCompleted: () => _endSession(context),
+                              Expanded(
+                                child: ListView(
+                                  controller: scrollController,
+                                  padding: EdgeInsets.fromLTRB(
+                                    0,
+                                    0,
+                                    0,
+                                    12 + bottomInset,
                                   ),
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          20, 8, 20, 6),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            active == null ? '附近停車場' : '泊緊',
+                                            style: RType.title(),
+                                            textHeightBehavior:
+                                                const TextHeightBehavior(
+                                              applyHeightToFirstAscent: false,
+                                              applyHeightToLastDescent: false,
+                                            ),
+                                          ),
+                                          if (active == null) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '向上拖可睇多啲 · 地圖中間係大頭釘',
+                                              style: RType.muted(),
+                                            ),
+                                          ],
+                                          const SizedBox(height: 10),
+                                          if (active == null)
+                                            TextField(
+                                              onChanged: (v) => context
+                                                  .read<ParkCatalogCubit>()
+                                                  .setQuery(v),
+                                              style: RType.body(),
+                                              decoration: InputDecoration(
+                                                hintText: '搜尋停車場 / 地區',
+                                                hintStyle: RType.muted(),
+                                                prefixIcon: const Icon(
+                                                  Icons.search_rounded,
+                                                  color: UberColors.muted,
+                                                ),
+                                                filled: true,
+                                                fillColor: UberColors.elevated,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 12,
+                                                ),
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                  borderSide: BorderSide.none,
+                                                ),
+                                              ),
+                                            ),
+                                          if (active != null)
+                                            Align(
+                                              alignment: Alignment.centerRight,
+                                              child: Text(
+                                                '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                                style: RType.muted(),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (selected != null)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            16, 0, 16, 8),
+                                        child: _SelectedCard(
+                                          park: selected,
+                                          distance:
+                                              ParkCatalogCubit.formatDistance(
+                                            context
+                                                .read<ParkCatalogCubit>()
+                                                .distanceMeters(selected),
+                                          ),
+                                          onOpen: () => context
+                                              .push('/park/${selected.id}'),
+                                        ),
+                                      ),
+                                    ...catalog.parks.map((p) {
+                                      final on = p.id == catalog.selectedId;
+                                      final dm = context
+                                          .read<ParkCatalogCubit>()
+                                          .distanceMeters(p);
+                                      return Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            16, 0, 16, 8),
+                                        child: _ParkTile(
+                                          park: p,
+                                          selected: on,
+                                          distance:
+                                              ParkCatalogCubit.formatDistance(
+                                                  dm),
+                                          onTap: () => context
+                                              .read<ParkCatalogCubit>()
+                                              .select(p.id),
+                                        ),
+                                      );
+                                    }),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          16, 8, 16, 8),
+                                      child: active == null
+                                          ? SlideToUnlock(
+                                              label: '右滑開始計時',
+                                              accent: UberColors.white,
+                                              thumbColor: UberColors.black,
+                                              onCompleted: () async {
+                                                final p = catalog.selected;
+                                                await context
+                                                    .read<SessionCubit>()
+                                                    .start(
+                                                      parkId: p?.id,
+                                                      parkName: p?.name,
+                                                    );
+                                                HapticFeedback.heavyImpact();
+                                              },
+                                            )
+                                          : SlideToUnlock(
+                                              label: '右滑結束 · 填收費',
+                                              accent: UberColors.accent,
+                                              thumbColor: UberColors.black,
+                                              trackColor:
+                                                  const Color(0xFF0A2A1A),
+                                              onCompleted: () =>
+                                                  _endSession(context),
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -374,6 +469,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       ),
     );
   }
+
 
   String _fmtDuration(Duration d) {
     final h = d.inHours;

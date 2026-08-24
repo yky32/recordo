@@ -7,7 +7,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park.dart';
 
-/// Dark map + pins + GPS. Center “big pin” like Google/Uber destination sample.
+/// Dark map + pins + GPS. Center pin like Google/Uber destination sample.
+/// Locate control lives in [HomeMapScreen] so it can sit above the sheet.
 class ParkMap extends StatefulWidget {
   const ParkMap({
     super.key,
@@ -16,6 +17,7 @@ class ParkMap extends StatefulWidget {
     this.onSelect,
     this.onUserLocation,
     this.onPinMoved,
+    this.onLocateState,
   });
 
   final List<Park> parks;
@@ -23,6 +25,8 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<String>? onSelect;
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
+  /// locating, error message (null = ok)
+  final void Function(bool locating, String? error)? onLocateState;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -35,7 +39,6 @@ class ParkMapState extends State<ParkMap> {
   StreamSubscription<Position>? _sub;
   LatLng? _me;
   bool _locating = false;
-  String? _locError;
   bool _didInitialRecenter = false;
   bool _mapMoving = false;
 
@@ -69,14 +72,12 @@ class ParkMapState extends State<ParkMap> {
 
   Future<void> locate({bool forceCamera = false}) async {
     if (_locating) return;
-    setState(() {
-      _locating = true;
-      _locError = null;
-    });
+    setState(() => _locating = true);
+    widget.onLocateState?.call(true, null);
     try {
       final enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) {
-        setState(() => _locError = '請開定位服務');
+        widget.onLocateState?.call(false, '請開定位服務');
         return;
       }
 
@@ -85,34 +86,45 @@ class ParkMapState extends State<ParkMap> {
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied) {
-        setState(() => _locError = '未有定位權限');
+        widget.onLocateState?.call(false, '未有定位權限');
         return;
       }
       if (perm == LocationPermission.deniedForever) {
-        setState(() => _locError = '請去設定開定位');
+        widget.onLocateState?.call(false, '請去設定開定位');
         return;
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 12),
-        ),
-      );
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+      } catch (_) {
+        pos = await Geolocator.getLastKnownPosition();
+      }
+      if (pos == null) {
+        widget.onLocateState?.call(false, '定位失敗 · 再試');
+        return;
+      }
+
       _applyPosition(pos, moveCamera: forceCamera || !_didInitialRecenter);
+      widget.onLocateState?.call(false, null);
 
       await _sub?.cancel();
       _sub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 12,
+          distanceFilter: 15,
         ),
       ).listen(
         (p) => _applyPosition(p, moveCamera: false),
         onError: (_) {},
       );
     } catch (_) {
-      if (mounted) setState(() => _locError = '定位失敗');
+      widget.onLocateState?.call(false, '定位失敗 · 再試');
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -121,10 +133,7 @@ class ParkMapState extends State<ParkMap> {
   void _applyPosition(Position pos, {required bool moveCamera}) {
     final ll = LatLng(pos.latitude, pos.longitude);
     if (!mounted) return;
-    setState(() {
-      _me = ll;
-      _locError = null;
-    });
+    setState(() => _me = ll);
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
@@ -138,8 +147,7 @@ class ParkMapState extends State<ParkMap> {
       setState(() => _mapMoving = true);
     } else if (e is MapEventMoveEnd) {
       setState(() => _mapMoving = false);
-      final c = _map.camera.center;
-      widget.onPinMoved?.call(c);
+      widget.onPinMoved?.call(_map.camera.center);
     }
   }
 
@@ -197,112 +205,49 @@ class ParkMapState extends State<ParkMap> {
             ),
           ],
         ),
-
-        // Fixed center pin (sample: drag map to move pin)
         IgnorePointer(
           child: Center(
             child: Padding(
-              // lift so tip sits on true center
               padding: EdgeInsets.only(bottom: _mapMoving ? 12 : 0),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: UberColors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: UberColors.black.withValues(alpha: 0.2),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.local_parking_rounded,
-                        color: UberColors.black,
-                        size: 24,
-                      ),
-                    ),
-                    Container(
-                      width: 3,
-                      height: 14,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
                       color: UberColors.white,
-                    ),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        shape: BoxShape.circle,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: UberColors.black.withValues(alpha: 0.2),
+                        width: 2,
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                    child: const Icon(
+                      Icons.local_parking_rounded,
+                      color: UberColors.black,
+                      size: 24,
+                    ),
+                  ),
+                  Container(width: 3, height: 14, color: UberColors.white),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ),
-
-        Positioned(
-          right: 16,
-          bottom: MediaQuery.sizeOf(context).height * 0.48 + 20,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (_locError != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: UberColors.sheet.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    _locError!,
-                    style: const TextStyle(
-                      color: UberColors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              Material(
-                color: UberColors.sheet.withValues(alpha: 0.95),
-                shape: const CircleBorder(),
-                elevation: 4,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: _locating ? null : () => locate(forceCamera: true),
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: _locating
-                        ? const Padding(
-                            padding: EdgeInsets.all(14),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: UberColors.white,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.my_location_rounded,
-                            color: UberColors.white,
-                          ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ],
