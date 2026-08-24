@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// App-wide theme mode. Default = dark (Uber night).
@@ -10,15 +11,17 @@ class ThemeController extends ChangeNotifier {
   static const _key = 'theme_mode'; // dark | light | system
 
   ThemeMode _mode = ThemeMode.dark;
+  int _generation = 0;
 
   ThemeMode get mode => _mode;
+
+  /// Bumps on every mode change — used to force route subtree rebuild.
+  int get generation => _generation;
 
   bool get isDark {
     if (_mode == ThemeMode.light) return false;
     if (_mode == ThemeMode.dark) return true;
-    // system
-    final brightness =
-        PlatformDispatcher.instance.platformBrightness;
+    final brightness = PlatformDispatcher.instance.platformBrightness;
     return brightness != Brightness.light;
   }
 
@@ -30,12 +33,18 @@ class ThemeController extends ChangeNotifier {
       'system' => ThemeMode.system,
       _ => ThemeMode.dark,
     };
+    _generation++;
     notifyListeners();
   }
 
   Future<void> setMode(ThemeMode mode) async {
+    if (_mode == mode) return;
     _mode = mode;
+    _generation++;
+    // Sync frame so MaterialApp + KeyedSubtree rebuild same tick as toggle.
     notifyListeners();
+    SchedulerBinding.instance.ensureVisualUpdate();
+
     final prefs = await SharedPreferences.getInstance();
     final raw = switch (mode) {
       ThemeMode.light => 'light',
