@@ -172,6 +172,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     selectedId: catalog.selectedId,
                     onSelect: (id) =>
                         context.read<ParkCatalogCubit>().select(id),
+                    onUserLocation: (ll) => context
+                        .read<ParkCatalogCubit>()
+                        .setUserLocation(ll.latitude, ll.longitude),
+                    onPinMoved: (ll) => context
+                        .read<ParkCatalogCubit>()
+                        .setPin(ll.latitude, ll.longitude),
                   ),
                   // top chrome
                   SafeArea(
@@ -235,29 +241,61 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    active == null
-                                        ? '附近停車場'
-                                        : '泊緊',
-                                    style: RType.title(),
-                                    // Syne g/y/p need room; avoid parent clip.
-                                    textHeightBehavior:
-                                        const TextHeightBehavior(
-                                      applyHeightToFirstAscent: false,
-                                      applyHeightToLastDescent: false,
-                                    ),
+                                Text(
+                                  active == null ? '附近停車場' : '泊緊',
+                                  style: RType.title(),
+                                  textHeightBehavior:
+                                      const TextHeightBehavior(
+                                    applyHeightToFirstAscent: false,
+                                    applyHeightToLastDescent: false,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                  style: RType.muted(),
-                                ),
+                                if (active == null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '地圖中間大頭釘 · 附近場會按距離排',
+                                    style: RType.muted(),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                if (active == null)
+                                  TextField(
+                                    onChanged: (v) => context
+                                        .read<ParkCatalogCubit>()
+                                        .setQuery(v),
+                                    style: RType.body(),
+                                    decoration: InputDecoration(
+                                      hintText: '搜尋停車場 / 地區',
+                                      hintStyle: RType.muted(),
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                        color: UberColors.muted,
+                                      ),
+                                      filled: true,
+                                      fillColor: UberColors.elevated,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 12,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                  ),
+                                if (active != null)
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                      style: RType.muted(),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -266,6 +304,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                               child: _SelectedCard(
                                 park: selected,
+                                distance: ParkCatalogCubit.formatDistance(
+                                  context
+                                      .read<ParkCatalogCubit>()
+                                      .distanceMeters(selected),
+                                ),
                                 onOpen: () =>
                                     context.push('/park/${selected.id}'),
                               ),
@@ -280,9 +323,14 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                               itemBuilder: (context, i) {
                                 final p = catalog.parks[i];
                                 final on = p.id == catalog.selectedId;
+                                final dm = context
+                                    .read<ParkCatalogCubit>()
+                                    .distanceMeters(p);
                                 return _ParkTile(
                                   park: p,
                                   selected: on,
+                                  distance:
+                                      ParkCatalogCubit.formatDistance(dm),
                                   onTap: () => context
                                       .read<ParkCatalogCubit>()
                                       .select(p.id),
@@ -427,9 +475,14 @@ class _LiveSessionBanner extends StatelessWidget {
 }
 
 class _SelectedCard extends StatelessWidget {
-  const _SelectedCard({required this.park, required this.onOpen});
+  const _SelectedCard({
+    required this.park,
+    required this.onOpen,
+    this.distance = '',
+  });
   final Park park;
   final VoidCallback onOpen;
+  final String distance;
 
   @override
   Widget build(BuildContext context) {
@@ -450,7 +503,11 @@ class _SelectedCard extends StatelessWidget {
                     Text(park.name, style: RType.titleSm()),
                     const SizedBox(height: 4),
                     Text(
-                      '${park.priceSummary} · ${park.freshnessLabel}',
+                      [
+                        if (distance.isNotEmpty) distance,
+                        park.priceSummary,
+                        park.freshnessLabel,
+                      ].join(' · '),
                       style: RType.muted(),
                     ),
                   ],
@@ -470,11 +527,13 @@ class _ParkTile extends StatelessWidget {
     required this.park,
     required this.selected,
     required this.onTap,
+    this.distance = '',
   });
 
   final Park park;
   final bool selected;
   final VoidCallback onTap;
+  final String distance;
 
   @override
   Widget build(BuildContext context) {
@@ -499,16 +558,21 @@ class _ParkTile extends StatelessWidget {
                   children: [
                     Text(park.name, style: RType.body()),
                     Text(
-                      '${park.district} · ${park.priceSummary}',
+                      [
+                        if (distance.isNotEmpty) distance,
+                        park.district,
+                        park.priceSummary,
+                      ].join(' · '),
                       style: RType.muted(),
                     ),
                   ],
                 ),
               ),
               if (!park.hasPrice)
-                Text('未有價', style: RType.label().copyWith(
-                  color: UberColors.accent,
-                )),
+                Text(
+                  '未有價',
+                  style: RType.label().copyWith(color: UberColors.accent),
+                ),
             ],
           ),
         ),
