@@ -8,7 +8,7 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 
-/// Park detail — Uber trip-detail density (map strip, hero, rows, bottom CTA).
+/// Park detail — map hero + price card + actions. No bottom dual CTA bar.
 class ParkDetailScreen extends StatefulWidget {
   const ParkDetailScreen({super.key, required this.parkId});
 
@@ -49,12 +49,13 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     HapticFeedback.lightImpact();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已確認')),
+        const SnackBar(content: Text('多謝 · 已確認價錢仍然啱')),
       );
     }
   }
 
   Future<void> _submit(BuildContext context, Park p) async {
+    FocusManager.instance.primaryFocus?.unfocus();
     double? parse(TextEditingController c) => double.tryParse(c.text.trim());
     await context.read<ParkCatalogCubit>().reportPrice(
           parkId: p.id,
@@ -66,7 +67,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     if (context.mounted) {
       setState(() => _editing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已更新')),
+        const SnackBar(content: Text('已更新場價')),
       );
     }
   }
@@ -98,222 +99,152 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
         return Scaffold(
           backgroundColor: UberColors.black,
-          body: Column(
-            children: [
-              Expanded(
-                child: CustomScrollView(
-                  slivers: [
-                    SliverAppBar(
-                      pinned: true,
-                      backgroundColor: UberColors.black,
-                      surfaceTintColor: Colors.transparent,
-                      leading: IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.pop(context),
+          body: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                backgroundColor: UberColors.black,
+                surfaceTintColor: Colors.transparent,
+                leading: IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                centerTitle: true,
+                title: Text('場詳情', style: RType.titleSm()),
+              ),
+              sliverToBox(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 28 + bottom),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Map
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: SizedBox(
+                          height: 168,
+                          width: double.infinity,
+                          child: _MiniMap(park: p),
+                        ),
                       ),
-                      centerTitle: true,
-                      title: Text('場詳情', style: RType.titleSm()),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      const SizedBox(height: 20),
+                      Text(
+                        p.name,
+                        style: RType.display().copyWith(fontSize: 26),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        [
+                          p.district,
+                          if (dist.isNotEmpty) dist,
+                        ].where((s) => s.isNotEmpty).join(' · '),
+                        style: RType.muted(),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // —— Price card (main info block) ——
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                        decoration: BoxDecoration(
+                          color: UberColors.elevated,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: UberColors.hairline.withValues(alpha: 0.6),
+                          ),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Map strip (Uber-style)
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: SizedBox(
-                                height: 160,
-                                width: double.infinity,
-                                child: _MiniMap(park: p),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            // Hero title
-                            Text(
-                              p.name,
-                              style: RType.display().copyWith(fontSize: 26),
-                            ),
+                            Text('司機報價', style: RType.label()),
                             const SizedBox(height: 8),
                             Text(
-                              [
-                                p.district,
-                                if (dist.isNotEmpty) dist,
-                                p.freshnessLabel,
-                              ].where((s) => s.isNotEmpty).join(' · '),
-                              style: RType.muted(),
+                              p.hasPrice ? p.priceSummary : '未有收費',
+                              style: RType.display().copyWith(fontSize: 28),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              p.hasPrice ? p.priceSummary : '未有收費',
-                              style: RType.title().copyWith(fontSize: 22),
+                              p.hasPrice
+                                  ? p.freshnessLabel
+                                  : '未有人報過 · 你可以做第一個',
+                              style: RType.muted(),
                             ),
+                            if (p.hasPrice) ...[
+                              const SizedBox(height: 14),
+                              const Divider(height: 1, color: UberColors.hairline),
+                              const SizedBox(height: 12),
+                              _PriceBreakdown(park: p),
+                            ],
                             if (p.heightM != null) ...[
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 10),
                               Text(
                                 '限高約 ${p.heightM}m',
                                 style: RType.muted(),
                               ),
                             ],
-                            const SizedBox(height: 16),
-                            // Chip actions
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                if (p.hasPrice)
-                                  _ChipButton(
-                                    icon: Icons.check_rounded,
-                                    label: '價錢仍然啱',
-                                    filled: true,
-                                    onTap: () => _confirm(context, p),
-                                  ),
-                                _ChipButton(
-                                  icon: Icons.edit_outlined,
-                                  label: _editing ? '收起' : '改收費',
-                                  filled: false,
-                                  onTap: () {
-                                    setState(() {
-                                      _editing = !_editing;
-                                      if (_editing) _prefill(p);
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
-                            // Divider section — Uber list rows
-                            Text('資料', style: RType.titleSm()),
-                            const SizedBox(height: 8),
                           ],
                         ),
                       ),
-                    ),
-                    SliverList(
-                      delegate: SliverChildListDelegate([
-                        _InfoRow(
-                          icon: Icons.payments_outlined,
-                          title: '司機報價',
-                          trailing: p.hasPrice ? p.priceSummary : '未有',
+
+                      const SizedBox(height: 14),
+                      Text(
+                        '價錢由用家更新，唔係 Google 或場方官方。',
+                        style: RType.muted(),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // —— Actions: full-width rows, not tiny chips ——
+                      if (p.hasPrice && !_editing)
+                        _ActionTile(
+                          icon: Icons.check_circle_outline_rounded,
+                          title: '價錢仍然啱',
+                          subtitle: '確認而家顯示嘅收費',
+                          accent: true,
+                          onTap: () => _confirm(context, p),
                         ),
-                        _InfoRow(
-                          icon: Icons.schedule_outlined,
-                          title: '更新時間',
-                          trailing: p.freshnessLabel,
-                        ),
-                        if (p.heightM != null)
-                          _InfoRow(
-                            icon: Icons.height_rounded,
-                            title: '限高',
-                            trailing: '~${p.heightM}m',
-                          ),
-                        _InfoRow(
-                          icon: Icons.place_outlined,
-                          title: '地區',
-                          trailing: p.district,
-                        ),
-                        _InfoRow(
-                          icon: Icons.info_outline_rounded,
-                          title: '價錢來源',
-                          trailing: '用家更新',
-                          subtitle: '唔係 Google 或場方官方價',
-                        ),
-                        if (_editing) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: Text('改收費', style: RType.titleSm()),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                            child: _field(_hourly, '時租 HK\$'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: _field(_daily, '日泊 HK\$（可空）'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: _field(_night, '夜泊 HK\$（可空）'),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: UberColors.white,
-                                foregroundColor: UberColors.black,
-                                minimumSize: const Size.fromHeight(52),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
-                              ),
-                              onPressed: () => _submit(context, p),
-                              child: const Text('提交更新'),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                      ]),
-                    ),
-                  ],
-                ),
-              ),
-              // Bottom bar — Uber style
-              Material(
-                color: UberColors.elevated,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom * 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: UberColors.white,
-                              side: const BorderSide(color: UberColors.hairline),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            onPressed: () {
-                              // Select this park on map & pop
-                              context
-                                  .read<ParkCatalogCubit>()
-                                  .select(p.id);
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.near_me_outlined, size: 20),
-                            label: const Text('用地圖睇'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
+                      if (p.hasPrice && !_editing) const SizedBox(height: 10),
+                      _ActionTile(
+                        icon: _editing
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.edit_outlined,
+                        title: _editing ? '收起改價' : '改收費',
+                        subtitle: _editing ? '收起表單' : '時租 / 日泊 / 夜泊',
+                        onTap: () {
+                          setState(() {
+                            _editing = !_editing;
+                            if (_editing) _prefill(p);
+                          });
+                        },
+                      ),
+
+                      if (_editing) ...[
+                        const SizedBox(height: 18),
+                        Text('更新收費', style: RType.titleSm()),
+                        const SizedBox(height: 12),
+                        _field(_hourly, '時租 HK\$'),
+                        const SizedBox(height: 10),
+                        _field(_daily, '日泊 HK\$（可空）'),
+                        const SizedBox(height: 10),
+                        _field(_night, '夜泊 HK\$（可空）'),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
                           child: FilledButton(
                             style: FilledButton.styleFrom(
                               backgroundColor: UberColors.white,
                               foregroundColor: UberColors.black,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(28),
                               ),
                             ),
-                            onPressed: () {
-                              context
-                                  .read<ParkCatalogCubit>()
-                                  .select(p.id);
-                              Navigator.pop(context);
-                              // Parent sheet shows slide CTA after select
-                            },
-                            child: const Text('揀呢個場'),
+                            onPressed: () => _submit(context, p),
+                            child: const Text('提交更新'),
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -329,6 +260,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
       controller: c,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       style: RType.body(),
+      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: RType.muted(),
@@ -337,6 +269,98 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+SliverToBoxAdapter sliverToBox({required Widget child}) =>
+    SliverToBoxAdapter(child: child);
+
+class _PriceBreakdown extends StatelessWidget {
+  const _PriceBreakdown({required this.park});
+  final Park park;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(String, String)>[
+      if (park.hourlyHkd != null)
+        ('時租', 'HK\$${park.hourlyHkd!.toStringAsFixed(0)}'),
+      if (park.dailyHkd != null)
+        ('日泊', 'HK\$${park.dailyHkd!.toStringAsFixed(0)}'),
+      if (park.nightHkd != null)
+        ('夜泊', 'HK\$${park.nightHkd!.toStringAsFixed(0)}'),
+    ];
+    if (rows.isEmpty) {
+      return Text(park.priceSummary, style: RType.body());
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(rows[i].$1, style: RType.muted()),
+              const Spacer(),
+              Text(rows[i].$2, style: RType.body()),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.accent = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: accent ? const Color(0xFF1A2E1A) : UberColors.elevated,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: accent ? UberColors.accent : UberColors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: RType.body()),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: RType.muted()),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: UberColors.muted,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -387,96 +411,6 @@ class _MiniMap extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChipButton extends StatelessWidget {
-  const _ChipButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.filled = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: filled ? UberColors.elevated2 : UberColors.elevated,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: UberColors.white),
-              const SizedBox(width: 8),
-              Text(label, style: RType.body()),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.title,
-    required this.trailing,
-    this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String trailing;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: UberColors.hairline, width: 0.5),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: UberColors.muted, size: 22),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: RType.body()),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle!, style: RType.muted()),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              trailing,
-              style: RType.muted(),
-              textAlign: TextAlign.end,
-            ),
           ),
         ],
       ),
