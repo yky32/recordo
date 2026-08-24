@@ -406,50 +406,66 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                   },
                                 ),
                               ),
-                              // sticky CTA — always visible
-                              Material(
-                                color: UberColors.sheet,
-                                elevation: 8,
-                                shadowColor: Colors.black54,
-                                child: Padding(
-                                  padding: EdgeInsets.fromLTRB(
-                                    16,
-                                    10,
-                                    16,
-                                    10 + bottomInset,
+                              // sticky CTA — only after park selected, or while parking
+                              if (active != null || selected != null)
+                                Material(
+                                  color: UberColors.sheet,
+                                  elevation: 8,
+                                  shadowColor: Colors.black54,
+                                  child: Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      16,
+                                      10,
+                                      16,
+                                      10 + bottomInset,
+                                    ),
+                                    child: active == null
+                                        ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Text(
+                                                selected!.name,
+                                                style: RType.body(),
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              SlideToUnlock(
+                                                label: '右滑開始計時',
+                                                accent: UberColors.white,
+                                                thumbColor: UberColors.black,
+                                                onCompleted: () async {
+                                                  final p = catalog.selected;
+                                                  if (p == null) return;
+                                                  await context
+                                                      .read<SessionCubit>()
+                                                      .start(
+                                                        parkId: p.id,
+                                                        parkName: p.name,
+                                                      );
+                                                  HapticFeedback
+                                                      .heavyImpact();
+                                                },
+                                              ),
+                                            ],
+                                          )
+                                        : SlideToUnlock(
+                                            label: '右滑結束 · 填收費',
+                                            accent: UberColors.accent,
+                                            thumbColor: UberColors.black,
+                                            trackColor:
+                                                const Color(0xFF0A2A1A),
+                                            onCompleted: () =>
+                                                _endSession(context),
+                                          ),
                                   ),
-                                  child: active == null
-                                      ? SlideToUnlock(
-                                          label: catalog.selected == null
-                                              ? '先揀一個場 · 右滑開始'
-                                              : '右滑開始計時',
-                                          accent: UberColors.white,
-                                          thumbColor: UberColors.black,
-                                          enabled:
-                                              catalog.selected != null,
-                                          onCompleted: () async {
-                                            final p = catalog.selected;
-                                            if (p == null) return;
-                                            await context
-                                                .read<SessionCubit>()
-                                                .start(
-                                                  parkId: p.id,
-                                                  parkName: p.name,
-                                                );
-                                            HapticFeedback.heavyImpact();
-                                          },
-                                        )
-                                      : SlideToUnlock(
-                                          label: '右滑結束 · 填收費',
-                                          accent: UberColors.accent,
-                                          thumbColor: UberColors.black,
-                                          trackColor:
-                                              const Color(0xFF0A2A1A),
-                                          onCompleted: () =>
-                                              _endSession(context),
-                                        ),
-                                ),
-                              ),
+                                )
+                              else
+                                // keep home indicator breathing room when no CTA
+                                SizedBox(height: 8 + bottomInset),
                             ],
                           ),
                         );
