@@ -217,9 +217,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: Row(
                         children: [
-                          _Pill(
-                            child: Text('Recordo', style: RType.titleSm()),
-                          ),
                           const Spacer(),
                           _RoundIcon(
                             icon: Icons.receipt_long_rounded,
@@ -344,7 +341,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                           if (active == null) ...[
                                             const SizedBox(height: 4),
                                             Text(
-                                              '向上拖可睇多啲 · 地圖中間係大頭釘',
+                                              '向上拖可睇多啲場',
                                               style: RType.muted(),
                                             ),
                                           ],
@@ -477,24 +474,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     if (h > 0) return '$h:$m:$s';
     return '$m:$s';
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: UberColors.sheet.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: UberColors.hairline),
-      ),
-      child: child,
-    );
   }
 }
 
