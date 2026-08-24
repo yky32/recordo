@@ -329,114 +329,125 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 behavior: HitTestBehavior.opaque,
                                 onTap: () {},
                                 child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(0, 10, 0, 4),
                                   child: Center(
                                     child: Container(
                                       width: 40,
                                       height: 4,
                                       decoration: BoxDecoration(
                                         color: UberColors.hairline,
-                                        borderRadius: BorderRadius.circular(99),
+                                        borderRadius:
+                                            BorderRadius.circular(99),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                              Expanded(
-                                child: ListView(
-                                  controller: scrollController,
-                                  padding: EdgeInsets.fromLTRB(
-                                    0,
-                                    0,
-                                    0,
-                                    12 + bottomInset,
-                                  ),
+                              // sticky title
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                                child: Row(
                                   children: [
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          20, 4, 20, 8),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              active == null
-                                                  ? '附近停車場'
-                                                  : '泊緊',
-                                              style: RType.title(),
-                                              textHeightBehavior:
-                                                  const TextHeightBehavior(
-                                                applyHeightToFirstAscent:
-                                                    false,
-                                                applyHeightToLastDescent:
-                                                    false,
-                                              ),
-                                            ),
-                                          ),
-                                          if (active != null)
-                                            Text(
-                                              '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                              style: RType.muted(),
-                                            )
-                                          else
-                                            Text(
-                                              '${catalog.parks.length} 個',
-                                              style: RType.muted(),
-                                            ),
-                                        ],
+                                    Expanded(
+                                      child: Text(
+                                        active == null ? '附近停車場' : '泊緊',
+                                        style: RType.title(),
+                                        textHeightBehavior:
+                                            const TextHeightBehavior(
+                                          applyHeightToFirstAscent: false,
+                                          applyHeightToLastDescent: false,
+                                        ),
                                       ),
                                     ),
-                                    ...catalog.parks.map((p) {
-                                      final on = p.id == catalog.selectedId;
-                                      final dm = context
-                                          .read<ParkCatalogCubit>()
-                                          .distanceMeters(p);
-                                      return Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            16, 0, 16, 8),
-                                        child: _ParkTile(
-                                          park: p,
-                                          selected: on,
-                                          distance:
-                                              ParkCatalogCubit.formatDistance(
-                                                  dm),
-                                          onTap: () => context
-                                              .read<ParkCatalogCubit>()
-                                              .select(p.id),
-                                          onOpenDetail: () => context
-                                              .push('/park/${p.id}'),
-                                        ),
-                                      );
-                                    }),
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 8, 16, 8),
-                                      child: active == null
-                                          ? SlideToUnlock(
-                                              label: '右滑開始計時',
-                                              accent: UberColors.white,
-                                              thumbColor: UberColors.black,
-                                              onCompleted: () async {
-                                                final p = catalog.selected;
-                                                await context
-                                                    .read<SessionCubit>()
-                                                    .start(
-                                                      parkId: p?.id,
-                                                      parkName: p?.name,
-                                                    );
-                                                HapticFeedback.heavyImpact();
-                                              },
-                                            )
-                                          : SlideToUnlock(
-                                              label: '右滑結束 · 填收費',
-                                              accent: UberColors.accent,
-                                              thumbColor: UberColors.black,
-                                              trackColor:
-                                                  const Color(0xFF0A2A1A),
-                                              onCompleted: () =>
-                                                  _endSession(context),
-                                            ),
-                                    ),
+                                    if (active != null)
+                                      Text(
+                                        '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                        style: RType.muted(),
+                                      )
+                                    else
+                                      Text(
+                                        '${catalog.parks.length} 個',
+                                        style: RType.muted(),
+                                      ),
                                   ],
+                                ),
+                              ),
+                              // scrollable parks only
+                              Expanded(
+                                child: ListView.builder(
+                                  controller: scrollController,
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 0, 16, 8),
+                                  itemCount: catalog.parks.length,
+                                  itemBuilder: (context, i) {
+                                    final p = catalog.parks[i];
+                                    final on = p.id == catalog.selectedId;
+                                    final dm = context
+                                        .read<ParkCatalogCubit>()
+                                        .distanceMeters(p);
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8),
+                                      child: _ParkTile(
+                                        park: p,
+                                        selected: on,
+                                        distance:
+                                            ParkCatalogCubit.formatDistance(
+                                                dm),
+                                        onTap: () => context
+                                            .read<ParkCatalogCubit>()
+                                            .select(p.id),
+                                        onOpenDetail: () =>
+                                            context.push('/park/${p.id}'),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              // sticky CTA — always visible
+                              Material(
+                                color: UberColors.sheet,
+                                elevation: 8,
+                                shadowColor: Colors.black54,
+                                child: Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    16,
+                                    10,
+                                    16,
+                                    10 + bottomInset,
+                                  ),
+                                  child: active == null
+                                      ? SlideToUnlock(
+                                          label: catalog.selected == null
+                                              ? '先揀一個場 · 右滑開始'
+                                              : '右滑開始計時',
+                                          accent: UberColors.white,
+                                          thumbColor: UberColors.black,
+                                          enabled:
+                                              catalog.selected != null,
+                                          onCompleted: () async {
+                                            final p = catalog.selected;
+                                            if (p == null) return;
+                                            await context
+                                                .read<SessionCubit>()
+                                                .start(
+                                                  parkId: p.id,
+                                                  parkName: p.name,
+                                                );
+                                            HapticFeedback.heavyImpact();
+                                          },
+                                        )
+                                      : SlideToUnlock(
+                                          label: '右滑結束 · 填收費',
+                                          accent: UberColors.accent,
+                                          thumbColor: UberColors.black,
+                                          trackColor:
+                                              const Color(0xFF0A2A1A),
+                                          onCompleted: () =>
+                                              _endSession(context),
+                                        ),
                                 ),
                               ),
                             ],
