@@ -32,6 +32,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
     with SingleTickerProviderStateMixin {
   double _dx = 0;
   late final AnimationController _snap;
+  void Function()? _tick;
 
   @override
   void initState() {
@@ -44,19 +45,33 @@ class _SlideToUnlockState extends State<SlideToUnlock>
 
   @override
   void dispose() {
+    if (_tick != null) {
+      _snap.removeListener(_tick!);
+      _tick = null;
+    }
     _snap.dispose();
     super.dispose();
   }
 
   void _reset() {
+    if (!mounted) return;
     final start = _dx;
+    if (_tick != null) {
+      _snap.removeListener(_tick!);
+    }
+    _tick = () {
+      if (!mounted) return;
+      setState(() => _dx = start * (1 - _snap.value));
+    };
     _snap
       ..reset()
-      ..addListener(() {
-        setState(() => _dx = start * (1 - _snap.value));
-      });
+      ..addListener(_tick!);
     _snap.forward().whenComplete(() {
-      _snap.removeListener(() {});
+      if (!mounted) return;
+      if (_tick != null) {
+        _snap.removeListener(_tick!);
+        _tick = null;
+      }
       setState(() => _dx = 0);
     });
   }
@@ -137,7 +152,9 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                               widget.onCompleted();
                               Future<void>.delayed(
                                 const Duration(milliseconds: 120),
-                                _reset,
+                                () {
+                                  if (mounted) _reset();
+                                },
                               );
                             } else {
                               HapticFeedback.selectionClick();
