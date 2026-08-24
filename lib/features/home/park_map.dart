@@ -47,6 +47,8 @@ class ParkMapState extends State<ParkMap> {
   bool _locating = false;
   bool _didInitialRecenter = false;
   bool _programmaticMove = false;
+  double? _pendingBandTop;
+  double? _pendingBandBottom;
 
   @override
   void initState() {
@@ -82,55 +84,47 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] exactly mid-way between search bottom and sheet top
-  /// (the two red lines). Always re-reads [bandTopY]/[bandBottomY] — dynamic.
-  void _centerOn(LatLng ll, {double? zoom}) {
+  /// Place [ll] at the exact midpoint of [bandTop]→[bandBottom] (red lines).
+  /// Uses flutter_map moveRaw offset math only (CameraFit was wrong when sheet tall).
+  void _centerOn(
+    LatLng ll, {
+    double? zoom,
+    double? bandTop,
+    double? bandBottom,
+  }) {
     if (!mounted) return;
     final z = (zoom ?? 15.5).clamp(14.0, 16.5);
-    final size = MediaQuery.sizeOf(context);
-    final h = size.height;
+    final h = MediaQuery.sizeOf(context).height;
 
-    // Live band from parent layout measure
-    var top = widget.bandTopY;
-    var bottom = widget.bandBottomY;
-    if (bottom <= top + 80) {
-      // Fallback if measure not ready
+    var top = bandTop ?? widget.bandTopY;
+    var bottom = bandBottom ?? widget.bandBottomY;
+    if (!top.isFinite || !bottom.isFinite || bottom <= top + 60) {
       top = h * 0.14;
       bottom = h * 0.55;
     }
-    top = top.clamp(0.0, h * 0.5);
-    bottom = bottom.clamp(top + 100, h);
 
-    // True midpoint of the two red lines
-    final midY = (top + bottom) / 2;
+    // True midpoint between the two red lines
+    final midY = (top + bottom) / 2.0;
+    // flutter_map: offset +Y places the LatLng LOWER on screen.
+    // Want LatLng at midY; geometric center is h/2 → offset.y = midY - h/2
+    final offsetY = midY - h / 2;
 
     _programmaticMove = true;
     try {
-      // 1) Prefer CameraFit: pads = chrome outside the visible band
-      final fitOk = _map.fitCamera(
-        CameraFit.coordinates(
-          coordinates: [ll],
-          padding: EdgeInsets.only(top: top, bottom: h - bottom),
-          maxZoom: z,
-          minZoom: z,
-        ),
+      final cam = _map.camera;
+      final newPoint = cam.projectAtZoom(ll, z);
+      // Same as MapControllerImpl.moveRaw with offset
+      final center = cam.unprojectAtZoom(
+        newPoint - Offset(0, offsetY),
+        z,
       );
-      if (!fitOk) {
-        // 2) move + offset — flutter_map: +offset.y moves point DOWN on screen
-        //    so offset.y = midY - (h/2) places [ll] at midY.
-        _map.move(ll, z, offset: Offset(0, midY - h / 2));
+      final ok = _map.move(center, z);
+      if (!ok) {
+        _map.move(ll, z, offset: Offset(0, offsetY));
       }
     } catch (_) {
       try {
-        final cam = _map.camera;
-        final projected = cam.projectAtZoom(ll, z);
-        // Screen center is (w/2, h/2). We want ll at (w/2, midY).
-        // center_pixel = point_pixel - (screen_point - screen_center)
-        // screen_point - screen_center = (0, midY - h/2)
-        final delta = Offset(0, midY - h / 2);
-        final newCenter =
-            cam.unprojectAtZoom(projected - delta, z);
-        _map.move(newCenter, z);
+        _map.move(ll, z, offset: Offset(0, offsetY));
       } catch (_) {
         _map.move(ll, z);
       }
@@ -144,22 +138,37 @@ class ParkMapState extends State<ParkMap> {
     });
   }
 
-  /// Locate button / public API — always re-fetch if missing, always camera.
-  void centerOnMe({bool animated = true}) {
+  /// Locate button — [bandTop]/[bandBottom] = live measure from parent.
+  void centerOnMe({
+    bool animated = true,
+    double? bandTop,
+    double? bandBottom,
+  }) {
     final me = _me;
     if (me == null) {
-      locate(forceCamera: true);
+      locate(
+        forceCamera: true,
+        bandTop: bandTop,
+        bandBottom: bandBottom,
+      );
       return;
     }
-    // Two-frame: measure may have just updated pads from parent.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _centerOn(me, zoom: 15.5);
-    });
+    _centerOn(
+      me,
+      zoom: 15.5,
+      bandTop: bandTop,
+      bandBottom: bandBottom,
+    );
   }
 
-  Future<void> locate({bool forceCamera = false}) async {
+  Future<void> locate({
+    bool forceCamera = false,
+    double? bandTop,
+    double? bandBottom,
+  }) async {
     if (_locating) return;
+    _pendingBandTop = bandTop;
+    _pendingBandBottom = bandBottom;
     setState(() => _locating = true);
     widget.onLocateState?.call(true, null);
     try {
@@ -225,9 +234,12 @@ class ParkMapState extends State<ParkMap> {
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
-      // Wait one frame so band measure is current.
+      final t = _pendingBandTop;
+      final b = _pendingBandBottom;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _centerOn(ll, zoom: 15.2);
+        if (mounted) {
+          _centerOn(ll, zoom: 15.5, bandTop: t, bandBottom: b);
+        }
       });
     }
   }

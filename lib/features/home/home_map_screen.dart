@@ -56,11 +56,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   }
 
   /// Dynamic: search bar bottom Y + sheet top Y (the two red lines).
-  void _measureChrome() {
-    if (!mounted) return;
+  /// Returns live values (also updates state when changed).
+  ({double top, double bottom}) _readBand() {
     final h = MediaQuery.sizeOf(context).height;
-    var topY = _bandTopY;
-    var bottomY = _bandBottomY;
+    var topY = h * 0.14;
+    var bottomY = h * (1.0 - _sheetExtent);
 
     final searchBox =
         _searchKey.currentContext?.findRenderObject() as RenderBox?;
@@ -75,40 +75,46 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       bottomY = sheetBox.localToGlobal(Offset.zero).dy;
     } else if (_sheetCtrl.isAttached) {
       bottomY = h * (1.0 - _sheetCtrl.size);
-    } else {
-      bottomY = h * (1.0 - _sheetExtent);
     }
 
-    // sanity — never call clamp when lower > upper
     if (!topY.isFinite || topY < 0) topY = h * 0.14;
     if (!bottomY.isFinite) bottomY = h * 0.55;
-    topY = topY.clamp(0.0, h);
-    // Ensure bottom is below top with a minimum open band
-    final minBottom = (topY + 80).clamp(0.0, h);
-    if (bottomY < minBottom) {
-      final preferred = topY + h * 0.35;
-      bottomY = preferred < minBottom
-          ? minBottom
-          : (preferred > h ? h : preferred);
-    }
+    if (topY > h) topY = h * 0.14;
     if (bottomY > h) bottomY = h;
-    if (bottomY <= topY) {
-      bottomY = topY + 120;
-      if (bottomY > h) bottomY = h;
-      if (bottomY <= topY) {
-        topY = h * 0.12;
-        bottomY = h * 0.55;
-        if (bottomY <= topY) bottomY = (topY + 100).clamp(0.0, h);
+    if (bottomY < topY + 100) {
+      // Prefer real sheet fraction so mid stays honest when sheet is tall
+      if (_sheetCtrl.isAttached) {
+        bottomY = h * (1.0 - _sheetCtrl.size);
       }
+      if (bottomY < topY + 100) {
+        bottomY = (topY + (h - topY) * 0.45).clamp(0.0, h);
+      }
+    }
+    if (bottomY <= topY) {
+      topY = h * 0.12;
+      bottomY = h * 0.55;
     }
 
     if ((topY - _bandTopY).abs() > 0.5 ||
         (bottomY - _bandBottomY).abs() > 0.5) {
-      setState(() {
-        _bandTopY = topY;
-        _bandBottomY = bottomY;
+      // Defer setState — callers may be in build/frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if ((topY - _bandTopY).abs() > 0.5 ||
+            (bottomY - _bandBottomY).abs() > 0.5) {
+          setState(() {
+            _bandTopY = topY;
+            _bandBottomY = bottomY;
+          });
+        }
       });
     }
+    return (top: topY, bottom: bottomY);
+  }
+
+  void _measureChrome() {
+    if (!mounted) return;
+    _readBand();
   }
 
   void _dragSheetBy(double deltaDy, double screenHeight) {
@@ -394,12 +400,17 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         onTap: _locating
                             ? null
                             : () {
-                                _measureChrome();
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  _mapKey.currentState
-                                      ?.centerOnMe(animated: true);
+                                hideKeyboard();
+                                final band = _readBand();
+                                setState(() {
+                                  _bandTopY = band.top;
+                                  _bandBottomY = band.bottom;
                                 });
+                                _mapKey.currentState?.centerOnMe(
+                                  animated: true,
+                                  bandTop: band.top,
+                                  bandBottom: band.bottom,
+                                );
                               },
                         child: SizedBox(
                           width: 48,
