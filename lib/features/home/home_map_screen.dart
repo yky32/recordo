@@ -79,9 +79,27 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       bottomY = h * (1.0 - _sheetExtent);
     }
 
-    // sanity
-    if (bottomY < topY + 80) {
-      bottomY = (topY + h * 0.35).clamp(topY + 80, h);
+    // sanity — never call clamp when lower > upper
+    if (!topY.isFinite || topY < 0) topY = h * 0.14;
+    if (!bottomY.isFinite) bottomY = h * 0.55;
+    topY = topY.clamp(0.0, h);
+    // Ensure bottom is below top with a minimum open band
+    final minBottom = (topY + 80).clamp(0.0, h);
+    if (bottomY < minBottom) {
+      final preferred = topY + h * 0.35;
+      bottomY = preferred < minBottom
+          ? minBottom
+          : (preferred > h ? h : preferred);
+    }
+    if (bottomY > h) bottomY = h;
+    if (bottomY <= topY) {
+      bottomY = topY + 120;
+      if (bottomY > h) bottomY = h;
+      if (bottomY <= topY) {
+        topY = h * 0.12;
+        bottomY = h * 0.55;
+        if (bottomY <= topY) bottomY = (topY + 100).clamp(0.0, h);
+      }
     }
 
     if ((topY - _bandTopY).abs() > 0.5 ||
