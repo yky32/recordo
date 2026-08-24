@@ -4,56 +4,47 @@
 
 Timer 用系統 `Text(timerInterval:countsDown:false)` **原生數秒**，唔使 Flutter 背景每秒 update。
 
-## 已做好（code）
+## 狀態
 
 | | |
 |--|--|
-| Flutter | `live_activities` · `LiveActivityService` · session start/end 自動起/停 |
+| Flutter | `live_activities` · `LiveActivityService` · session start/end |
 | Swift UI | `ios/RecordoLiveActivity/RecordoLiveActivity.swift` |
-| App Group | `group.com.recordo.live` |
-| Runner | `NSSupportsLiveActivities` · `Runner.entitlements` |
-| iOS floor | **16.1+** |
+| Xcode target | **RecordoLiveActivity** 已 embed 入 Runner |
+| App Group | `group.com.recordo.live`（Runner + Extension entitlements） |
+| iOS | **16.1+** |
+| Simulator build | ✅ 可 compile（**Live Activity 只喺真機顯示**） |
 
-## 你要喺 Xcode 做一次（必要）
-
-Widget Extension **必須** embed 入 app，否則 Live Activity 唔會顯示。
+## 你仲要做（Signing）
 
 1. 開 `ios/Runner.xcworkspace`
-2. **File → New → Target… → Widget Extension**
-   - Product Name: `RecordoLiveActivity`
-   - Embed in Application: **Runner**
-   - **唔使** Include Configuration App Intent（可 untick）
-3. 用我哋嘅檔取代 Xcode 自動產生嘅 Swift：
-   - 刪 extension 入面預設 `.swift`
-   - 將 repo 內 `ios/RecordoLiveActivity/RecordoLiveActivity.swift` 加落 extension target
-   - Info.plist 要有 `NSSupportsLiveActivities = YES`（repo 已有樣板）
-4. **Signing & Capabilities**（**Runner** + **RecordoLiveActivity** 兩個 target）：
-   - **+ App Groups** → `group.com.recordo.live`（兩個都要勾同一 group）
-5. Extension target:
-   - Deployment **iOS 16.1**
-   - Bundle id 建議：`com.recordo.RecordoLiveActivity`
-6. Runner target 確認有 App Group capability + entitlements 指向 `Runner/Runner.entitlements`
-7. 選 **真機**（Simulator **唔支援** Live Activities）
-8. Run
+2. **Runner** target → Signing & Capabilities  
+   - Team 選你自己  
+   - 確認 **App Groups** 有 `group.com.recordo.live`
+3. **RecordoLiveActivity** target → 同樣 Team + App Groups 勾同一 group  
+4. **真機** run（Simulator 唔會出 Island / Live Activity banner）
 
-### 驗證
+如果 App Groups 喺 Xcode UI 未出現 capability chip：  
++ Capability → App Groups → 加 `group.com.recordo.live`（兩個 target）。
+
+## 驗證
 
 1. 揀場 → 右滑開始計時  
-2. Home 鍵 / 上掃退 app  
-3. 鎖屏 / Dynamic Island 應見 **計時中 + 場名 + 時間在走**  
+2. Home / 上掃退 app  
+3. 鎖屏或 Dynamic Island → **計時中 + 場名 + 時間在走**  
 4. 結束 session → Live Activity 消失  
 
-## 故障排查
+## 故障
 
 | 現象 | 檢查 |
 |------|------|
-| 完全冇 banner | Extension 未 embed / Attributes 名唔係 `LiveActivitiesAppAttributes` |
-| 有 activity 但空白 | App Group id 兩邊唔一致 / 未勾 group |
-| `areActivitiesEnabled` false | 系統設定 → 面容ID與密碼 / 專注模式；或 iOS < 16.1 |
-| 只有鎖屏冇 Island | 需要 iPhone 14 Pro 或之後 |
+| 完全冇 banner | 真機？iOS≥16.1？App Group 兩邊一致？ |
+| `areActivitiesEnabled` false | 設定 → 面容ID與密碼 / Live Activities |
+| 只有鎖屏冇 Island | 需要 14 Pro 或之後 |
+| Signing error | Extension bundle id `com.recordo.RecordoLiveActivity` 要同 Team |
 
-## 開發備註
+## 開發
 
 - `createActivity(session.id, { parkName, startMs, hourlyLabel })`
-- `iOSEnableRemoteUpdates: false`（唔使 Push 更新）
-- 唔好 rename `LiveActivitiesAppAttributes`
+- Attributes 名必須 `LiveActivitiesAppAttributes`（plugin 約定）
+- Embed phase 必須喺 **Thin Binary 之前**（避免 Runner build cycle）
