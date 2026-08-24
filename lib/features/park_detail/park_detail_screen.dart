@@ -194,29 +194,44 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
                       const SizedBox(height: 20),
 
-                      // —— Actions: full-width rows, not tiny chips ——
-                      if (p.hasPrice && !_editing)
-                        _ActionTile(
-                          icon: Icons.check_circle_outline_rounded,
-                          title: '價錢仍然啱',
-                          subtitle: '確認而家顯示嘅收費',
-                          accent: true,
-                          onTap: () => _confirm(context, p),
+                      // —— Actions: 50/50 one row ——
+                      if (!_editing)
+                        Row(
+                          children: [
+                            if (p.hasPrice) ...[
+                              Expanded(
+                                child: _ActionHalf(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  title: '價錢仍然啱',
+                                  subtitle: '確認收費',
+                                  accent: true,
+                                  onTap: () => _confirm(context, p),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Expanded(
+                              child: _ActionHalf(
+                                icon: Icons.edit_outlined,
+                                title: '改收費',
+                                subtitle: '時 / 日 / 夜',
+                                onTap: () {
+                                  setState(() {
+                                    _editing = true;
+                                    _prefill(p);
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        _ActionHalf(
+                          icon: Icons.keyboard_arrow_up_rounded,
+                          title: '收起改價',
+                          subtitle: '返回',
+                          onTap: () => setState(() => _editing = false),
                         ),
-                      if (p.hasPrice && !_editing) const SizedBox(height: 10),
-                      _ActionTile(
-                        icon: _editing
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.edit_outlined,
-                        title: _editing ? '收起改價' : '改收費',
-                        subtitle: _editing ? '收起表單' : '時租 / 日泊 / 夜泊',
-                        onTap: () {
-                          setState(() {
-                            _editing = !_editing;
-                            if (_editing) _prefill(p);
-                          });
-                        },
-                      ),
 
                       if (_editing) ...[
                         const SizedBox(height: 18),
@@ -312,8 +327,8 @@ class _PriceBreakdown extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+class _ActionHalf extends StatelessWidget {
+  const _ActionHalf({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -336,28 +351,28 @@ class _ActionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
                 icon,
                 color: accent ? UberColors.accent : UberColors.white,
-                size: 24,
+                size: 22,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: RType.body()),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: RType.muted()),
-                  ],
-                ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: RType.body(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: UberColors.muted,
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: RType.muted(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
