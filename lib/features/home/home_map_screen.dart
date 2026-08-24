@@ -341,6 +341,14 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                               context.push('/history');
                             },
                           ),
+                          const SizedBox(width: 8),
+                          _RoundIcon(
+                            icon: Icons.settings_rounded,
+                            onTap: () {
+                              hideKeyboard();
+                              context.push('/settings');
+                            },
+                          ),
                         ],
                       ),
                     ),

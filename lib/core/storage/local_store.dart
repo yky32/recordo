@@ -41,4 +41,7 @@ abstract final class StorageKeys {
   static const sessions = 'parking_sessions';
   static const ugcPrices = 'ugc_prices';
   static const activeSession = 'active_session';
+  static const ugcNewParks = 'ugc_new_parks';
+  static const prefHaptics = 'pref_haptics';
+  static const prefRemindLog = 'pref_remind_log';
 }

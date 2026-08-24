@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:recordo/features/history/history_screen.dart';
 import 'package:recordo/features/home/home_map_screen.dart';
 import 'package:recordo/features/park_detail/park_detail_screen.dart';
+import 'package:recordo/features/settings/report_park_screen.dart';
+import 'package:recordo/features/settings/settings_screen.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 
@@ -24,6 +26,16 @@ GoRouter buildRouter() {
           GoRoute(
             path: 'history',
             builder: (context, state) => const HistoryScreen(),
+          ),
+          GoRoute(
+            path: 'settings',
+            builder: (context, state) => const SettingsScreen(),
+            routes: [
+              GoRoute(
+                path: 'report-park',
+                builder: (context, state) => const ReportParkScreen(),
+              ),
+            ],
           ),
         ],
       ),

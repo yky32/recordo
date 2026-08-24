@@ -159,4 +159,32 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     load();
     select(parkId);
   }
+
+  Future<void> reportNewPark({
+    required String name,
+    required String district,
+    String address = '',
+    double? lat,
+    double? lng,
+    double? hourly,
+    double? daily,
+    double? night,
+    double? heightM,
+    String note = '',
+  }) async {
+    final p = await _repo.reportNewPark(
+      name: name,
+      district: district,
+      address: address,
+      lat: lat,
+      lng: lng,
+      hourly: hourly,
+      daily: daily,
+      night: night,
+      heightM: heightM,
+      note: note,
+    );
+    load();
+    select(p.id);
+  }
 }
