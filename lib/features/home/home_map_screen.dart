@@ -523,7 +523,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                             )
                                           else
                                             Text(
-                                              '${catalog.parks.length} 個',
+                                              catalog.totalInDb > 0
+                                                  ? '${catalog.parks.length} 附近 · 庫存 ${catalog.totalInDb}'
+                                                  : '${catalog.parks.length} 個',
                                               style: RType.muted(),
                                             ),
                                         ],

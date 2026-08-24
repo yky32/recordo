@@ -79,7 +79,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
     return BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
       builder: (context, state) {
-        final p = state.parks.where((e) => e.id == widget.parkId).firstOrNull;
+        final p = state.parks.where((e) => e.id == widget.parkId).firstOrNull ??
+            context.read<ParkCatalogCubit>().parkById(widget.parkId);
         if (p == null) {
           return Scaffold(
             backgroundColor: UberColors.black,
