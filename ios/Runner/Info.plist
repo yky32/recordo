@@ -70,6 +70,10 @@
 	<string>顯示你附近嘅停車場同記低泊車位置。</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Show nearby car parks while you use Recordo.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationQueriesSchemes</key>

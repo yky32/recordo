@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
+import 'package:recordo/features/session/live_activity_service.dart';
 import 'package:recordo/features/session/parking_session.dart';
 import 'package:uuid/uuid.dart';
 
@@ -53,9 +54,18 @@ class SessionCubit extends Cubit<SessionState> {
     final active =
         activeRaw == null ? null : ParkingSession.fromJson(activeRaw);
     emit(SessionState(active: active, history: list));
+
+    // Restore Live Activity if session still active
+    if (active != null) {
+      LiveActivityService.instance.startForSession(active);
+    }
   }
 
-  Future<void> start({String? parkId, String? parkName}) async {
+  Future<void> start({
+    String? parkId,
+    String? parkName,
+    String? hourlyLabel,
+  }) async {
     if (state.active != null) return;
     final s = ParkingSession(
       id: _uuid.v4(),
@@ -65,6 +75,10 @@ class SessionCubit extends Cubit<SessionState> {
     );
     await Bootstrap.store.setJson(StorageKeys.activeSession, s.toJson());
     emit(state.copyWith(active: s));
+    await LiveActivityService.instance.startForSession(
+      s,
+      hourlyLabel: hourlyLabel,
+    );
   }
 
   Future<void> end({
@@ -89,5 +103,6 @@ class SessionCubit extends Cubit<SessionState> {
     );
     await Bootstrap.store.remove(StorageKeys.activeSession);
     emit(SessionState(active: null, history: history));
+    await LiveActivityService.instance.end();
   }
 }

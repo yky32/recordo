@@ -521,11 +521,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                                 onCompleted: () async {
                                                   final p = catalog.selected;
                                                   if (p == null) return;
+                                                  final hourly = p.hourlyHkd;
                                                   await context
                                                       .read<SessionCubit>()
                                                       .start(
                                                         parkId: p.id,
                                                         parkName: p.name,
+                                                        hourlyLabel: hourly != null
+                                                            ? 'HK\$${hourly.toStringAsFixed(0)}'
+                                                            : null,
                                                       );
                                                   HapticFeedback
                                                       .heavyImpact();
