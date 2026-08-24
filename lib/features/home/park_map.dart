@@ -104,7 +104,9 @@ class ParkMapState extends State<ParkMap> {
     }
 
     final open = (h - padTop - padBottom).clamp(minOpen * 0.5, h);
-    final targetY = padTop + open * 0.5;
+    // Optical target: slightly above true mid of visible band
+    // (dogfood: mid still sat low near sheet — nudge ~12% of band up)
+    final targetY = padTop + open * 0.38;
     // Correct sign: target above geometric mid → negative dy → point higher
     final offset = Offset(0, targetY - h / 2);
 
