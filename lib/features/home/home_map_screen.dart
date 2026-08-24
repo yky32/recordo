@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
-import 'package:recordo/features/home/uber_map_canvas.dart';
+import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -167,7 +167,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  UberMapCanvas(
+                  ParkMap(
                     parks: catalog.parks,
                     selectedId: catalog.selectedId,
                     onSelect: (id) =>
