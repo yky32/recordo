@@ -55,31 +55,35 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     }
   }
 
-  /// Real pixels: search bottom + sheet top (handle). Optical mid uses these.
+  /// Real pixels from layout: search bottom + sheet top (handle).
   void _measureChrome() {
     if (!mounted) return;
     final h = MediaQuery.sizeOf(context).height;
     var padTop = _padTop;
     var padBottom = _padBottom;
 
-    final searchCtx = _searchKey.currentContext;
-    final searchBox = searchCtx?.findRenderObject() as RenderBox?;
+    final searchBox =
+        _searchKey.currentContext?.findRenderObject() as RenderBox?;
     if (searchBox != null && searchBox.hasSize) {
-      final topLeft = searchBox.localToGlobal(Offset.zero);
-      padTop = topLeft.dy + searchBox.size.height + 6;
+      final origin = searchBox.localToGlobal(Offset.zero);
+      // Bottom edge of search row + small gap under bar
+      padTop = origin.dy + searchBox.size.height + 4;
     }
 
-    final sheetCtx = _sheetKey.currentContext;
-    final sheetBox = sheetCtx?.findRenderObject() as RenderBox?;
+    final sheetBox =
+        _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (sheetBox != null && sheetBox.hasSize) {
+      // Top of sheet Material = grabber / handle band
       final sheetTop = sheetBox.localToGlobal(Offset.zero).dy;
-      padBottom = (h - sheetTop).clamp(80.0, h * 0.9);
+      padBottom = (h - sheetTop).clamp(100.0, h * 0.92);
+    } else if (_sheetCtrl.isAttached) {
+      padBottom = h * _sheetCtrl.size;
     } else {
-      // Fallback until sheet lays out
       padBottom = h * _sheetExtent;
     }
 
-    if ((padTop - _padTop).abs() > 1 || (padBottom - _padBottom).abs() > 1) {
+    if ((padTop - _padTop).abs() > 0.5 ||
+        (padBottom - _padBottom).abs() > 0.5) {
       setState(() {
         _padTop = padTop;
         _padBottom = padBottom;
