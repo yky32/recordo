@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/parks/park.dart';
@@ -30,7 +31,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   double _bandTopY = 120;
   double _bandBottomY = 500;
 
-  static const _sheetMin = 0.20;
+  static const _sheetMin = 0.28; // header only
+  static const _sheetMinWithCta = 0.38; // header + slide CTA + safe area
   static const _sheetInit = 0.42;
   static const _sheetMax = 0.88;
 
@@ -280,9 +282,23 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
             builder: (context, session) {
               final active = session.active;
               final selected = catalog.selected;
+              final showCta = active != null || selected != null;
+              final sheetMin = showCta ? _sheetMinWithCta : _sheetMin;
               // Locate FAB sits just above sheet top
               final sheetH = screenH * _sheetExtent;
               final locateBottom = sheetH + 12;
+
+              // Keep sheet tall enough for sticky CTA (avoids Column overflow)
+              if (showCta &&
+                  _sheetCtrl.isAttached &&
+                  _sheetCtrl.size + 0.001 < sheetMin) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || !_sheetCtrl.isAttached) return;
+                  if (_sheetCtrl.size < sheetMin) {
+                    _sheetCtrl.jumpTo(sheetMin);
+                  }
+                });
+              }
 
               void hideKeyboard() {
                 FocusManager.instance.primaryFocus?.unfocus();
@@ -452,10 +468,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     child: DraggableScrollableSheet(
                       controller: _sheetCtrl,
                       initialChildSize: _sheetInit,
-                      minChildSize: _sheetMin,
+                      minChildSize: sheetMin,
                       maxChildSize: _sheetMax,
                       snap: true,
-                      snapSizes: const [_sheetMin, _sheetInit, 0.65, _sheetMax],
+                      snapSizes: [
+                        sheetMin,
+                        _sheetInit,
+                        0.65,
+                        _sheetMax,
+                      ],
                       builder: (context, scrollController) {
                         final screenH = MediaQuery.sizeOf(context).height;
                         return Material(
@@ -480,10 +501,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 },
                                 onVerticalDragEnd: (_) => _snapSheet(),
                                 child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
-                                          0, 12, 0, 8),
+                                          0, 10, 0, 6),
                                       child: Center(
                                         child: Container(
                                           width: 44,
@@ -498,7 +520,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.fromLTRB(
-                                          20, 0, 20, 10),
+                                          20, 0, 20, 8),
                                       child: Row(
                                         children: [
                                           Expanded(
@@ -506,7 +528,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                               active == null
                                                   ? '附近停車場'
                                                   : '泊緊',
-                                              style: RType.title(),
+                                              style: RType.titleSm(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               textHeightBehavior:
                                                   const TextHeightBehavior(
                                                 applyHeightToFirstAscent:
@@ -575,12 +599,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                   child: Padding(
                                     padding: EdgeInsets.fromLTRB(
                                       16,
-                                      10,
+                                      8,
                                       16,
-                                      10 + bottomInset,
+                                      8 + bottomInset,
                                     ),
                                     child: active == null
                                         ? Column(
+                                            mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.stretch,
                                             children: [
@@ -592,11 +617,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                                     TextOverflow.ellipsis,
                                                 textAlign: TextAlign.center,
                                               ),
-                                              SizedBox(height: 8),
+                                              const SizedBox(height: 6),
                                               SlideToUnlock(
                                                 label: '右滑開始計時',
-                                                accent: UberColors.white,
-                                                thumbColor: UberColors.black,
+                                                height: 56,
+                                                accent: UberColors.ctaFill,
+                                                thumbColor: UberColors.ctaOnFill,
                                                 onCompleted: () async {
                                                   final p = catalog.selected;
                                                   if (p == null) return;
@@ -614,10 +640,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                           )
                                         : SlideToUnlock(
                                             label: '右滑結束 · 填收費',
+                                            height: 56,
                                             accent: UberColors.accent,
-                                            thumbColor: UberColors.black,
-                                            trackColor:
-                                                const Color(0xFF0A2A1A),
+                                            thumbColor: UberColors.ctaOnFill,
+                                            trackColor: ThemeController.instance.isDark
+                                                ? const Color(0xFF0A2A1A)
+                                                : const Color(0xFFD4F5E4),
                                             onCompleted: () =>
                                                 _endSession(context),
                                           ),
