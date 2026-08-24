@@ -384,22 +384,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                         ],
                                       ),
                                     ),
-                                    if (selected != null)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            16, 0, 16, 8),
-                                        child: _SelectedCard(
-                                          park: selected,
-                                          distance:
-                                              ParkCatalogCubit.formatDistance(
-                                            context
-                                                .read<ParkCatalogCubit>()
-                                                .distanceMeters(selected),
-                                          ),
-                                          onOpen: () => context
-                                              .push('/park/${selected.id}'),
-                                        ),
-                                      ),
                                     ...catalog.parks.map((p) {
                                       final on = p.id == catalog.selectedId;
                                       final dm = context
@@ -417,6 +401,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                           onTap: () => context
                                               .read<ParkCatalogCubit>()
                                               .select(p.id),
+                                          onOpenDetail: () => context
+                                              .push('/park/${p.id}'),
                                         ),
                                       );
                                     }),
@@ -549,65 +535,19 @@ class _LiveSessionBanner extends StatelessWidget {
   }
 }
 
-class _SelectedCard extends StatelessWidget {
-  const _SelectedCard({
-    required this.park,
-    required this.onOpen,
-    this.distance = '',
-  });
-  final Park park;
-  final VoidCallback onOpen;
-  final String distance;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: UberColors.elevated,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(park.name, style: RType.titleSm()),
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        if (distance.isNotEmpty) distance,
-                        park.priceSummary,
-                        park.freshnessLabel,
-                      ].join(' · '),
-                      style: RType.muted(),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: UberColors.muted),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ParkTile extends StatelessWidget {
   const _ParkTile({
     required this.park,
     required this.selected,
     required this.onTap,
+    required this.onOpenDetail,
     this.distance = '',
   });
 
   final Park park;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onOpenDetail;
   final String distance;
 
   @override
@@ -619,14 +559,14 @@ class _ParkTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           child: Row(
             children: [
               Icon(
                 Icons.local_parking_rounded,
                 color: selected ? UberColors.accent : UberColors.white,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,17 +577,32 @@ class _ParkTile extends StatelessWidget {
                         if (distance.isNotEmpty) distance,
                         park.district,
                         park.priceSummary,
-                      ].join(' · '),
+                        if (selected) park.freshnessLabel,
+                      ].where((s) => s.isNotEmpty).join(' · '),
                       style: RType.muted(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
               if (!park.hasPrice)
-                Text(
-                  '未有價',
-                  style: RType.label().copyWith(color: UberColors.accent),
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    '未有價',
+                    style: RType.label().copyWith(color: UberColors.accent),
+                  ),
                 ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: '詳情',
+                onPressed: onOpenDetail,
+                icon: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: UberColors.muted,
+                ),
+              ),
             ],
           ),
         ),
