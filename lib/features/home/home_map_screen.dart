@@ -307,8 +307,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         customBorder: const CircleBorder(),
                         onTap: _locating
                             ? null
-                            : () => _mapKey.currentState
-                                ?.locate(forceCamera: true),
+                            : () {
+                                final s = _mapKey.currentState;
+                                if (s == null) return;
+                                s.centerOnMe(animated: true);
+                              },
                         child: SizedBox(
                           width: 48,
                           height: 48,
