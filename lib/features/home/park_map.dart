@@ -7,8 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park.dart';
 
-/// Dark map + pins + GPS. Center pin like Google/Uber destination sample.
-/// Locate control lives in [HomeMapScreen] so it can sit above the sheet.
+/// Dark map + park markers + GPS. Locate control lives in HomeMapScreen.
 class ParkMap extends StatefulWidget {
   const ParkMap({
     super.key,
@@ -40,8 +39,6 @@ class ParkMapState extends State<ParkMap> {
   LatLng? _me;
   bool _locating = false;
   bool _didInitialRecenter = false;
-  bool _mapMoving = false;
-
   @override
   void initState() {
     super.initState();
@@ -143,10 +140,7 @@ class ParkMapState extends State<ParkMap> {
   }
 
   void _onMapEvent(MapEvent e) {
-    if (e is MapEventMoveStart) {
-      setState(() => _mapMoving = true);
-    } else if (e is MapEventMoveEnd) {
-      setState(() => _mapMoving = false);
+    if (e is MapEventMoveEnd) {
       widget.onPinMoved?.call(_map.camera.center);
     }
   }
@@ -174,81 +168,31 @@ class ParkMapState extends State<ParkMap> {
         ),
     ];
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            initialCenter: _me ?? hkCenter,
-            initialZoom: 14.5,
-            minZoom: 10,
-            maxZoom: 18,
-            backgroundColor: UberColors.mapBlock,
-            onMapEvent: _onMapEvent,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate:
-                  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.recordo',
-              retinaMode: RetinaMode.isHighDensity(context),
-            ),
-            MarkerLayer(markers: markers),
-            const SimpleAttributionWidget(
-              source: Text('© OSM · CARTO'),
-              backgroundColor: Color(0x66000000),
-            ),
-          ],
+    return FlutterMap(
+      mapController: _map,
+      options: MapOptions(
+        initialCenter: _me ?? hkCenter,
+        initialZoom: 14.5,
+        minZoom: 10,
+        maxZoom: 18,
+        backgroundColor: UberColors.mapBlock,
+        onMapEvent: _onMapEvent,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),
-        IgnorePointer(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: _mapMoving ? 12 : 0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: UberColors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: UberColors.black.withValues(alpha: 0.2),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.local_parking_rounded,
-                      color: UberColors.black,
-                      size: 24,
-                    ),
-                  ),
-                  Container(width: 3, height: 14, color: UberColors.white),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate:
+              'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+          subdomains: const ['a', 'b', 'c', 'd'],
+          userAgentPackageName: 'com.recordo',
+          retinaMode: RetinaMode.isHighDensity(context),
+        ),
+        MarkerLayer(markers: markers),
+        const SimpleAttributionWidget(
+          source: Text('© OSM · CARTO'),
+          backgroundColor: Color(0x66000000),
         ),
       ],
     );
