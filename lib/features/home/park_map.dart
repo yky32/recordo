@@ -87,11 +87,17 @@ class ParkMapState extends State<ParkMap> {
   void _centerOn(LatLng ll, {double? zoom, bool animated = true}) {
     if (!mounted) return;
     final z = zoom ?? _map.camera.zoom.clamp(14.0, 16.5);
-    final h = MediaQuery.sizeOf(context).height;
-    // Visible map height ≈ (1 - sheet) * H; its midpoint is above screen center.
-    // Offset so target sits in that midpoint (negative Y = up on screen).
+    final mq = MediaQuery.of(context);
+    final h = mq.size.height;
+    // Usable map band: below search chrome, above sheet.
+    final topChrome = mq.padding.top + 72; // search bar block
     final sheet = widget.sheetExtent.clamp(0.15, 0.9);
-    final offsetY = -h * sheet / 2;
+    final sheetTop = h * (1 - sheet);
+    final band = (sheetTop - topChrome).clamp(80.0, h);
+    // Sit pin ~62% down the visible band (was geometric mid → felt too high)
+    final targetY = topChrome + band * 0.62;
+    // flutter_map: +offset.y places the point higher on screen
+    final offsetY = h / 2 - targetY;
     final offset = Offset(0, offsetY);
 
     _programmaticMove = true;
