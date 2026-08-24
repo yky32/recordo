@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 
@@ -193,6 +194,26 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                       ),
 
                       const SizedBox(height: 20),
+
+                      // Navigate out — primary after user likes the park
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: UberColors.white,
+                            foregroundColor: UberColors.black,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          onPressed: () =>
+                              ParkNavigation.showChooser(context, p),
+                          icon: const Icon(Icons.directions_rounded),
+                          label: const Text('開始導航'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       // —— Actions: 50/50 one row ——
                       if (!_editing)

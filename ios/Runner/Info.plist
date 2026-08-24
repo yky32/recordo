@@ -72,5 +72,11 @@
 	<string>Show nearby car parks while you use Recordo.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>googlechromes</string>
+		<string>maps</string>
+	</array>
 </dict>
 </plist>
