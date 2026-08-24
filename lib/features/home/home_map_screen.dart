@@ -11,6 +11,7 @@ import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/session/end_session_sheet.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
 class HomeMapScreen extends StatefulWidget {
@@ -156,117 +157,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   }
 
   Future<void> _endSession(BuildContext context) async {
-    final session = context.read<SessionCubit>().state.active;
-    if (session == null) return;
-    final amountCtrl = TextEditingController();
-    final catalog = context.read<ParkCatalogCubit>();
-    final selected = catalog.state.selected;
-    var updatePrice = true;
-
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: UberColors.sheet,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                12,
-                20,
-                20 + MediaQuery.viewInsetsOf(ctx).bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('結束', style: RType.title()),
-                  SizedBox(height: 6),
-                  Text(
-                    '今次泊咗幾多錢？',
-                    style: RType.muted(),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: amountCtrl,
-                    autofocus: true,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    style: RType.titleSm(),
-                    decoration: InputDecoration(
-                      prefixText: 'HK\$ ',
-                      prefixStyle: RType.titleSm(),
-                      hintText: '0',
-                      filled: true,
-                      fillColor: UberColors.elevated,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  if (selected != null)
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        '順便更新場價',
-                        style: RType.body(),
-                      ),
-                      subtitle: null,
-                      value: updatePrice,
-                      activeThumbColor: UberColors.accent,
-                      onChanged: (v) => setModal(() => updatePrice = v),
-                    ),
-                  SizedBox(height: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: UberColors.ctaFill,
-                      foregroundColor: UberColors.ctaOnFill,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () {
-                      final v = double.tryParse(amountCtrl.text.trim());
-                      if (v == null || v < 0) return;
-                      Navigator.pop(ctx, true);
-                    },
-                    child: const Text('儲存'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (ok != true || !context.mounted) return;
-    final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-    final park = catalog.state.selected;
-    await context.read<SessionCubit>().end(
-          amountHkd: amount,
-          parkId: park?.id ?? session.parkId,
-          parkName: park?.name ?? session.parkName,
-        );
-    if (updatePrice && park != null && amount > 0 && context.mounted) {
-      // Treat paid amount as a soft hourly signal if session short; else store as note via hourly guess.
-      final hours = session.elapsed.inMinutes / 60.0;
-      final hourly = hours >= 0.25 ? (amount / hours) : amount;
-      await catalog.reportPrice(
-        parkId: park.id,
-        hourly: double.parse(hourly.toStringAsFixed(0)),
-      );
-    }
-    if (context.mounted) {
-      HapticFeedback.lightImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已記低')),
-      );
-    }
+    await showEndSessionSheet(context);
   }
 
   @override
@@ -406,9 +297,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       top: MediaQuery.paddingOf(context).top + 72,
                       left: 16,
                       right: 16,
-                      child: _LiveSessionBanner(
-                        label: _fmtDuration(active.elapsed),
-                        parkName: active.parkName ?? selected?.name,
+                      child: GestureDetector(
+                        onTap: () => context.push('/session'),
+                        child: _LiveSessionBanner(
+                          label: formatSessionDuration(active.elapsed),
+                          parkName: active.parkName ?? selected?.name,
+                        ),
                       ),
                     ),
                   // Locate — always above sheet
@@ -634,6 +528,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                                       );
                                                   HapticFeedback
                                                       .heavyImpact();
+                                                  if (context.mounted) {
+                                                    context.push('/session');
+                                                  }
                                                 },
                                               ),
                                             ],
@@ -669,7 +566,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   }
 
 
-  String _fmtDuration(Duration d) {
+  String formatSessionDuration(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -744,6 +641,8 @@ class _LiveSessionBanner extends StatelessWidget {
             ),
           ),
           Text(label, style: RType.titleSm()),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded, color: UberColors.muted, size: 22),
         ],
       ),
     );

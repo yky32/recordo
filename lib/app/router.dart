@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:recordo/features/history/history_screen.dart';
 import 'package:recordo/features/home/home_map_screen.dart';
 import 'package:recordo/features/park_detail/park_detail_screen.dart';
+import 'package:recordo/features/session/active_session_screen.dart';
 import 'package:recordo/features/settings/report_park_screen.dart';
 import 'package:recordo/features/settings/settings_screen.dart';
 
@@ -22,6 +23,10 @@ GoRouter buildRouter() {
             builder: (context, state) => ParkDetailScreen(
               parkId: state.pathParameters['id']!,
             ),
+          ),
+          GoRoute(
+            path: 'session',
+            builder: (context, state) => const ActiveSessionScreen(),
           ),
           GoRoute(
             path: 'history',
