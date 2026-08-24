@@ -22,9 +22,13 @@ class HomeMapScreen extends StatefulWidget {
 class _HomeMapScreenState extends State<HomeMapScreen> {
   Timer? _tick;
   final _mapKey = GlobalKey<ParkMapState>();
+  final _searchKey = GlobalKey();
+  final _sheetKey = GlobalKey();
   final _sheetCtrl = DraggableScrollableController();
   double _sheetExtent = 0.42;
   bool _locating = false;
+  double _padTop = 120;
+  double _padBottom = 360;
 
   static const _sheetMin = 0.20;
   static const _sheetInit = 0.42;
@@ -39,6 +43,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       }
     });
     _sheetCtrl.addListener(_onSheet);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
   }
 
   void _onSheet() {
@@ -46,6 +51,39 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     final s = _sheetCtrl.size;
     if ((s - _sheetExtent).abs() > 0.008) {
       setState(() => _sheetExtent = s);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
+    }
+  }
+
+  /// Real pixels: search bottom + sheet top (handle). Optical mid uses these.
+  void _measureChrome() {
+    if (!mounted) return;
+    final h = MediaQuery.sizeOf(context).height;
+    var padTop = _padTop;
+    var padBottom = _padBottom;
+
+    final searchCtx = _searchKey.currentContext;
+    final searchBox = searchCtx?.findRenderObject() as RenderBox?;
+    if (searchBox != null && searchBox.hasSize) {
+      final topLeft = searchBox.localToGlobal(Offset.zero);
+      padTop = topLeft.dy + searchBox.size.height + 6;
+    }
+
+    final sheetCtx = _sheetKey.currentContext;
+    final sheetBox = sheetCtx?.findRenderObject() as RenderBox?;
+    if (sheetBox != null && sheetBox.hasSize) {
+      final sheetTop = sheetBox.localToGlobal(Offset.zero).dy;
+      padBottom = (h - sheetTop).clamp(80.0, h * 0.9);
+    } else {
+      // Fallback until sheet lays out
+      padBottom = h * _sheetExtent;
+    }
+
+    if ((padTop - _padTop).abs() > 1 || (padBottom - _padBottom).abs() > 1) {
+      setState(() {
+        _padTop = padTop;
+        _padBottom = padBottom;
+      });
     }
   }
 
@@ -222,7 +260,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     key: _mapKey,
                     parks: catalog.parks,
                     selectedId: catalog.selectedId,
-                    sheetExtent: _sheetExtent,
+                    padTop: _padTop,
+                    padBottom: _padBottom,
                     onSelect: (id) =>
                         context.read<ParkCatalogCubit>().select(id),
                     onUserLocation: (ll) => context
@@ -246,6 +285,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: Row(
+                        key: _searchKey,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
@@ -308,9 +348,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         onTap: _locating
                             ? null
                             : () {
-                                final s = _mapKey.currentState;
-                                if (s == null) return;
-                                s.centerOnMe(animated: true);
+                                _measureChrome();
+                                WidgetsBinding.instance
+                                    .addPostFrameCallback((_) {
+                                  _mapKey.currentState
+                                      ?.centerOnMe(animated: true);
+                                });
                               },
                         child: SizedBox(
                           width: 48,
@@ -336,6 +379,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     onNotification: (n) {
                       if ((n.extent - _sheetExtent).abs() > 0.005) {
                         setState(() => _sheetExtent = n.extent);
+                        WidgetsBinding.instance
+                            .addPostFrameCallback((_) => _measureChrome());
                       }
                       return false;
                     },
@@ -349,6 +394,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       builder: (context, scrollController) {
                         final screenH = MediaQuery.sizeOf(context).height;
                         return Material(
+                          key: _sheetKey,
                           color: UberColors.sheet,
                           elevation: 12,
                           borderRadius: const BorderRadius.vertical(
