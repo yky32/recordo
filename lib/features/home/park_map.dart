@@ -17,6 +17,7 @@ class ParkMap extends StatefulWidget {
     this.onUserLocation,
     this.onPinMoved,
     this.onLocateState,
+    this.onMapInteraction,
     /// Measured px from top of screen to bottom of search chrome.
     this.padTop = 120,
     /// Measured px from top of sheet (handle) to bottom of screen.
@@ -29,6 +30,8 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
+  /// Tap / drag map — parent dismisses keyboard.
+  final VoidCallback? onMapInteraction;
   final double padTop;
   final double padBottom;
 
@@ -213,6 +216,12 @@ class ParkMapState extends State<ParkMap> {
   }
 
   void _onMapEvent(MapEvent e) {
+    if (e is MapEventMoveStart ||
+        e is MapEventTap ||
+        e is MapEventLongPress ||
+        e is MapEventSecondaryTap) {
+      widget.onMapInteraction?.call();
+    }
     if (_programmaticMove) return;
     if (e is MapEventMoveEnd) {
       widget.onPinMoved?.call(_map.camera.center);
@@ -251,6 +260,7 @@ class ParkMapState extends State<ParkMap> {
         maxZoom: 18,
         backgroundColor: UberColors.mapBlock,
         onMapEvent: _onMapEvent,
+        onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
         interactionOptions: const InteractionOptions(
           flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
         ),

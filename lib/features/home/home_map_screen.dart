@@ -247,6 +247,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     final screenH = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
         builder: (context, catalog) {
           return BlocBuilder<SessionCubit, SessionState>(
@@ -257,6 +258,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               final sheetH = screenH * _sheetExtent;
               final locateBottom = sheetH + 12;
 
+              void hideKeyboard() {
+                FocusManager.instance.primaryFocus?.unfocus();
+              }
+
               return Stack(
                 fit: StackFit.expand,
                 children: [
@@ -266,8 +271,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                     selectedId: catalog.selectedId,
                     padTop: _padTop,
                     padBottom: _padBottom,
-                    onSelect: (id) =>
-                        context.read<ParkCatalogCubit>().select(id),
+                    onSelect: (id) {
+                      hideKeyboard();
+                      context.read<ParkCatalogCubit>().select(id);
+                    },
+                    onMapInteraction: hideKeyboard,
                     onUserLocation: (ll) => context
                         .read<ParkCatalogCubit>()
                         .setUserLocation(ll.latitude, ll.longitude),
@@ -302,8 +310,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 onChanged: (v) => context
                                     .read<ParkCatalogCubit>()
                                     .setQuery(v),
+                                onTapOutside: (_) => hideKeyboard(),
                                 style: RType.body(),
                                 cursorColor: UberColors.white,
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: (_) => hideKeyboard(),
                                 decoration: InputDecoration(
                                   hintText: '搜尋停車場 / 地區',
                                   hintStyle: RType.muted(),
@@ -323,7 +334,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                           const SizedBox(width: 10),
                           _RoundIcon(
                             icon: Icons.receipt_long_rounded,
-                            onTap: () => context.push('/history'),
+                            onTap: () {
+                              hideKeyboard();
+                              context.push('/history');
+                            },
                           ),
                         ],
                       ),
@@ -410,8 +424,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                               // Handle + title: vertical drag adjusts sheet height
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
-                                onVerticalDragUpdate: (d) =>
-                                    _dragSheetBy(d.delta.dy, screenH),
+                                onTap: () => FocusManager.instance.primaryFocus
+                                    ?.unfocus(),
+                                onVerticalDragUpdate: (d) {
+                                  FocusManager.instance.primaryFocus
+                                      ?.unfocus();
+                                  _dragSheetBy(d.delta.dy, screenH);
+                                },
                                 onVerticalDragEnd: (_) => _snapSheet(),
                                 child: Column(
                                   children: [
