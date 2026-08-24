@@ -80,60 +80,40 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] on the optical mid-line of the measured visible band
-  /// (search bottom → sheet handle top).
+  /// Place [ll] on mid-line of visible band (search bottom → sheet top).
   ///
-  /// Dogfood (TF 26–28): pure mid still sat **low** (below red crosshair).
-  /// Bias ~14% of band **up** toward search so blue/pin hits the crosshair.
+  /// flutter_map `move` offset: **positive Y places the point LOWER** on screen
+  /// (docs + moveRaw: center = unproject(point - offset)).
+  /// So offset.dy = targetY - screenMidY.
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
-    final z = (zoom ?? _map.camera.zoom).clamp(14.0, 16.5);
-    final h = MediaQuery.sizeOf(context).height;
-    var padTop = widget.padTop.clamp(0.0, h * 0.45);
-    var padBottom = widget.padBottom.clamp(0.0, h * 0.85);
+    final z = (zoom ?? 15.2).clamp(14.0, 16.5);
+    final size = MediaQuery.sizeOf(context);
+    final h = size.height;
 
-    final open = h - padTop - padBottom;
-    if (open < 80) {
-      _programmaticMove = true;
-      _map.move(ll, z);
-      _clearProg();
-      return;
+    var padTop = widget.padTop.clamp(48.0, h * 0.4);
+    var padBottom = widget.padBottom.clamp(80.0, h * 0.78);
+
+    // Keep a usable open band so the point never lands under the sheet.
+    const minOpen = 200.0;
+    if (h - padTop - padBottom < minOpen) {
+      padBottom = (h - padTop - minOpen).clamp(80.0, h * 0.7);
     }
 
-    // Shift optical target UP (smaller screen Y): increase bottom pad.
-    // 0.14 ≈ gap between true mid and user's red line on device shots.
-    const biasFrac = 0.14;
-    final shiftUp = open * biasFrac;
-    padBottom = (padBottom + shiftUp).clamp(0.0, h * 0.9);
-    // keep top stable so band still starts under search
-    if (padTop + padBottom >= h - 48) {
-      padBottom = (h - 48 - padTop).clamp(0.0, h);
-    }
+    final open = (h - padTop - padBottom).clamp(minOpen * 0.5, h);
+    final targetY = padTop + open * 0.5;
+    // Correct sign: target above geometric mid → negative dy → point higher
+    final offset = Offset(0, targetY - h / 2);
 
     _programmaticMove = true;
     try {
-      _map.fitCamera(
-        CameraFit.coordinates(
-          coordinates: [ll],
-          padding: EdgeInsets.only(top: padTop, bottom: padBottom),
-          maxZoom: z,
-          minZoom: z,
-        ),
-      );
-    } catch (_) {
-      // Fallback project math (screen Y down)
-      try {
-        final cam = _map.camera;
-        final projected = cam.projectAtZoom(ll, z);
-        final targetY = padTop + (h - padTop - padBottom) * 0.5;
-        final dy = targetY - h / 2; // negative ⇒ above geometric center
-        // CRS y ≈ screen y: center pixel = point - dy
-        final newCenter =
-            cam.unprojectAtZoom(Offset(projected.dx, projected.dy - dy), z);
-        _map.move(newCenter, z);
-      } catch (_) {
+      final moved = _map.move(ll, z, offset: offset);
+      if (!moved) {
+        // Still force a plain center so blue is never lost off-world
         _map.move(ll, z);
       }
+    } catch (_) {
+      _map.move(ll, z);
     }
     _clearProg();
   }
@@ -144,14 +124,18 @@ class ParkMapState extends State<ParkMap> {
     });
   }
 
-  /// Locate button / public API.
+  /// Locate button / public API — always re-fetch if missing, always camera.
   void centerOnMe({bool animated = true}) {
     final me = _me;
     if (me == null) {
       locate(forceCamera: true);
       return;
     }
-    _centerOn(me, zoom: 15.2);
+    // Two-frame: measure may have just updated pads from parent.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _centerOn(me, zoom: 15.5);
+    });
   }
 
   Future<void> locate({bool forceCamera = false}) async {
