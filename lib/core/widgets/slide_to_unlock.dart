@@ -10,18 +10,18 @@ class SlideToUnlock extends StatefulWidget {
     required this.label,
     required this.onCompleted,
     this.enabled = true,
-    this.accent = UberColors.white,
-    this.trackColor = UberColors.elevated2,
-    this.thumbColor = UberColors.black,
+    this.accent,
+    this.trackColor,
+    this.thumbColor,
     this.height = 64,
   });
 
   final String label;
   final VoidCallback onCompleted;
   final bool enabled;
-  final Color accent;
-  final Color trackColor;
-  final Color thumbColor;
+  final Color? accent;
+  final Color? trackColor;
+  final Color? thumbColor;
   final double height;
 
   @override
@@ -63,6 +63,10 @@ class _SlideToUnlockState extends State<SlideToUnlock>
 
   @override
   Widget build(BuildContext context) {
+    final accent = widget.accent ?? UberColors.ctaFill;
+    final track = widget.trackColor ?? UberColors.elevated2;
+    final thumbIcon = widget.thumbColor ?? UberColors.ctaOnFill;
+
     return LayoutBuilder(
       builder: (context, c) {
         final h = widget.height;
@@ -75,13 +79,12 @@ class _SlideToUnlockState extends State<SlideToUnlock>
           child: Container(
             height: h,
             decoration: BoxDecoration(
-              color: widget.trackColor,
+              color: track,
               borderRadius: BorderRadius.circular(h / 2),
             ),
             child: Stack(
               alignment: Alignment.centerLeft,
               children: [
-                // fill
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(h / 2),
@@ -91,7 +94,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                         widthFactor: progress,
                         heightFactor: 1,
                         child: ColoredBox(
-                          color: widget.accent.withValues(alpha: 0.18),
+                          color: accent.withValues(alpha: 0.18),
                         ),
                       ),
                     ),
@@ -109,7 +112,6 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                     ),
                   ),
                 ),
-                // chevrons hint
                 Positioned(
                   right: 22,
                   child: Icon(
@@ -147,9 +149,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                       width: thumb,
                       height: thumb,
                       decoration: BoxDecoration(
-                        color: widget.enabled
-                            ? widget.accent
-                            : UberColors.muted,
+                        color: widget.enabled ? accent : UberColors.muted,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
@@ -161,7 +161,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                       ),
                       child: Icon(
                         Icons.arrow_forward_rounded,
-                        color: widget.thumbColor,
+                        color: thumbIcon,
                         size: 26,
                       ),
                     ),

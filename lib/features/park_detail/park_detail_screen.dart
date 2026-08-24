@@ -108,7 +108,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                 backgroundColor: UberColors.black,
                 surfaceTintColor: Colors.transparent,
                 leading: IconButton(
-                  icon: const Icon(Icons.close_rounded),
+                  icon: Icon(Icons.close_rounded),
                   onPressed: () => Navigator.pop(context),
                 ),
                 centerTitle: true,
@@ -129,7 +129,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                           child: _MiniMap(park: p),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: 20),
                       Text(
                         p.name,
                         style: RType.display().copyWith(fontSize: 26),
@@ -159,7 +159,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('司機報價', style: RType.label()),
-                            const SizedBox(height: 8),
+                            SizedBox(height: 8),
                             Text(
                               p.hasPrice ? p.priceSummary : '未有收費',
                               style: RType.display().copyWith(fontSize: 28),
@@ -173,8 +173,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                             ),
                             if (p.hasPrice) ...[
                               const SizedBox(height: 14),
-                              const Divider(height: 1, color: UberColors.hairline),
-                              const SizedBox(height: 12),
+                              Divider(height: 1, color: UberColors.hairline),
+                              SizedBox(height: 12),
                               _PriceBreakdown(park: p),
                             ],
                             if (p.heightM != null) ...[
@@ -202,8 +202,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         height: 52,
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: UberColors.white,
-                            foregroundColor: UberColors.black,
+                            backgroundColor: UberColors.ctaFill,
+                            foregroundColor: UberColors.ctaOnFill,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(28),
                             ),
@@ -256,7 +256,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         ),
 
                       if (_editing) ...[
-                        const SizedBox(height: 18),
+                        SizedBox(height: 18),
                         Text('更新收費', style: RType.titleSm()),
                         const SizedBox(height: 12),
                         _field(_hourly, '時租 HK\$'),
@@ -270,8 +270,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                           height: 52,
                           child: FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: UberColors.white,
-                              foregroundColor: UberColors.black,
+                              backgroundColor: UberColors.ctaFill,
+                              foregroundColor: UberColors.ctaOnFill,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(28),
                               ),
@@ -424,7 +424,7 @@ class _MiniMap extends StatelessWidget {
         children: [
           TileLayer(
             urlTemplate:
-                'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                UberColors.mapTileUrl,
             subdomains: const ['a', 'b', 'c', 'd'],
             userAgentPackageName: 'com.recordo',
           ),
@@ -440,7 +440,7 @@ class _MiniMap extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.local_parking_rounded,
                     color: UberColors.black,
                     size: 22,

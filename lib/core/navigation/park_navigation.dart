@@ -90,7 +90,7 @@ abstract final class ParkNavigation {
     return ListTile(
       leading: Icon(icon, color: UberColors.white),
       title: Text(label, style: RType.body()),
-      trailing: const Icon(Icons.chevron_right, color: UberColors.muted),
+      trailing: Icon(Icons.chevron_right, color: UberColors.muted),
       onTap: onTap,
     );
   }

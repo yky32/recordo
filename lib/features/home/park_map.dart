@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park.dart';
 
 /// Map fills only the visible band (parent positions it).
@@ -239,30 +240,35 @@ class ParkMapState extends State<ParkMap> {
         ),
     ];
 
-    return FlutterMap(
-      mapController: _map,
-      options: MapOptions(
-        initialCenter: _me ?? hkCenter,
-        initialZoom: 14.5,
-        minZoom: 10,
-        maxZoom: 18,
-        backgroundColor: UberColors.mapBlock,
-        onMapEvent: _onMapEvent,
-        onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
-        interactionOptions: const InteractionOptions(
-          flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-        ),
-      ),
-      children: [
-        TileLayer(
-          urlTemplate:
-              'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-          subdomains: const ['a', 'b', 'c', 'd'],
-          userAgentPackageName: 'com.recordo',
-          retinaMode: RetinaMode.isHighDensity(context),
-        ),
-        MarkerLayer(markers: markers),
-      ],
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (context, _) {
+        return FlutterMap(
+          mapController: _map,
+          options: MapOptions(
+            initialCenter: _me ?? hkCenter,
+            initialZoom: 14.5,
+            minZoom: 10,
+            maxZoom: 18,
+            backgroundColor: UberColors.mapBlock,
+            onMapEvent: _onMapEvent,
+            onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+            ),
+          ),
+          children: [
+            TileLayer(
+              key: ValueKey(UberColors.mapTileUrl),
+              urlTemplate: UberColors.mapTileUrl,
+              subdomains: const ['a', 'b', 'c', 'd'],
+              userAgentPackageName: 'com.recordo',
+              retinaMode: RetinaMode.isHighDensity(context),
+            ),
+            MarkerLayer(markers: markers),
+          ],
+        );
+      },
     );
   }
 }

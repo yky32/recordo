@@ -149,7 +149,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
         backgroundColor: UberColors.black,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
+          icon: Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
@@ -162,7 +162,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
             '幫大家加多一個場。資料會即時出現喺你部機嘅地圖；之後可以再同步。',
             style: RType.muted(),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           _label('名稱 *'),
           _field(_name, '例如：時代廣場停車場', textCapitalization: TextCapitalization.words),
           const SizedBox(height: 14),
@@ -183,8 +183,8 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.my_location, color: UberColors.accent, size: 20),
-                    const SizedBox(width: 10),
+                    Icon(Icons.my_location, color: UberColors.accent, size: 20),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text('用我而家位置做座標', style: RType.body()),
                     ),
@@ -197,7 +197,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
                   ],
                 ),
                 if (_locLabel != null) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Text(_locLabel!, style: RType.muted()),
                 ],
               ],
@@ -222,8 +222,8 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
             height: 54,
             child: FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: UberColors.white,
-                foregroundColor: UberColors.black,
+                backgroundColor: UberColors.ctaFill,
+                foregroundColor: UberColors.ctaOnFill,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                 ),

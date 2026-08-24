@@ -180,7 +180,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text('結束', style: RType.title()),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Text(
                     '今次泊咗幾多錢？',
                     style: RType.muted(),
@@ -204,7 +204,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   if (selected != null)
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
@@ -217,11 +217,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       activeThumbColor: UberColors.accent,
                       onChanged: (v) => setModal(() => updatePrice = v),
                     ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: UberColors.white,
-                      foregroundColor: UberColors.black,
+                      backgroundColor: UberColors.ctaFill,
+                      foregroundColor: UberColors.ctaOnFill,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -292,7 +292,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                 fit: StackFit.expand,
                 children: [
                   // Dark fill under map chrome
-                  const ColoredBox(color: UberColors.mapBlock),
+                  ColoredBox(color: UberColors.mapBlock),
                   // Map ONLY in visible band (search bottom → sheet top).
                   // Geometric center of this widget == optical mid of red lines.
                   Positioned(
@@ -352,7 +352,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                 decoration: InputDecoration(
                                   hintText: '搜尋停車場 / 地區',
                                   hintStyle: RType.muted(),
-                                  prefixIcon: const Icon(
+                                  prefixIcon: Icon(
                                     Icons.search_rounded,
                                     color: UberColors.muted,
                                   ),
@@ -424,14 +424,14 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                           width: 48,
                           height: 48,
                           child: _locating
-                              ? const Padding(
+                              ? Padding(
                                   padding: EdgeInsets.all(14),
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: UberColors.white,
                                   ),
                                 )
-                              : const Icon(
+                              : Icon(
                                   Icons.my_location_rounded,
                                   color: UberColors.white,
                                 ),
@@ -592,7 +592,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                                     TextOverflow.ellipsis,
                                                 textAlign: TextAlign.center,
                                               ),
-                                              const SizedBox(height: 8),
+                                              SizedBox(height: 8),
                                               SlideToUnlock(
                                                 label: '右滑開始計時',
                                                 accent: UberColors.white,
@@ -692,12 +692,12 @@ class _LiveSessionBanner extends StatelessWidget {
           Container(
             width: 10,
             height: 10,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: UberColors.accent,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,7 +753,7 @@ class _ParkTile extends StatelessWidget {
                 Icons.local_parking_rounded,
                 color: selected ? UberColors.accent : UberColors.white,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,7 +785,7 @@ class _ParkTile extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 tooltip: '詳情',
                 onPressed: onOpenDetail,
-                icon: const Icon(
+                icon: Icon(
                   Icons.chevron_right_rounded,
                   color: UberColors.muted,
                 ),

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/app/app.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -12,15 +13,12 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarBrightness: Brightness.dark,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF000000),
-    ),
-  );
   await Bootstrap.init();
-  await RecordoSupabase.init(); // no-op without dart-defines
+  await ThemeController.instance.hydrate();
+  await RecordoSupabase.init();
+  _syncSystemUi();
+  ThemeController.instance.addListener(_syncSystemUi);
+
   runApp(
     MultiBlocProvider(
       providers: [
@@ -28,6 +26,19 @@ Future<void> main() async {
         BlocProvider(create: (_) => SessionCubit()..hydrate()),
       ],
       child: const RecordoApp(),
+    ),
+  );
+}
+
+void _syncSystemUi() {
+  final dark = ThemeController.instance.isDark;
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle(
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: dark ? Colors.black : const Color(0xFFF3F3F3),
+      systemNavigationBarIconBrightness:
+          dark ? Brightness.light : Brightness.dark,
     ),
   );
 }

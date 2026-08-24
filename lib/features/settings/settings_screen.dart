@@ -6,6 +6,7 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uber-style settings hub.
@@ -84,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: UberColors.black,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
+          icon: Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
@@ -169,6 +170,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 22),
+          _SectionLabel('外觀'),
+          _SettingsCard(
+            children: [
+              ListenableBuilder(
+                listenable: ThemeController.instance,
+                builder: (context, _) {
+                  final mode = ThemeController.instance.mode;
+                  final label = switch (mode) {
+                    ThemeMode.light => '淺色',
+                    ThemeMode.system => '跟系統',
+                    ThemeMode.dark => '深色（預設）',
+                  };
+                  return Column(
+                    children: [
+                      _NavRow(
+                        icon: Icons.dark_mode_outlined,
+                        title: '主題',
+                        subtitle: label,
+                        onTap: () async {
+                          // cycle dark → light → system → dark
+                          final next = switch (mode) {
+                            ThemeMode.dark => ThemeMode.light,
+                            ThemeMode.light => ThemeMode.system,
+                            ThemeMode.system => ThemeMode.dark,
+                          };
+                          await ThemeController.instance.setMode(next);
+                        },
+                      ),
+                      _ToggleRow(
+                        icon: Icons.wb_sunny_outlined,
+                        title: '淺色模式',
+                        subtitle: 'Uber light · 地圖改浅底',
+                        value: !ThemeController.instance.isDark,
+                        onChanged: (v) {
+                          ThemeController.instance.setMode(
+                            v ? ThemeMode.light : ThemeMode.dark,
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
           _SectionLabel('偏好'),
           _SettingsCard(
             children: [
@@ -196,7 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 22),
+          SizedBox(height: 22),
           _SectionLabel('關於 Recordo'),
           _SettingsCard(
             children: [
@@ -271,8 +318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
-                    const Icon(Icons.tag, color: UberColors.muted, size: 22),
-                    const SizedBox(width: 14),
+                    Icon(Icons.tag, color: UberColors.muted, size: 22),
+                    SizedBox(width: 14),
                     Expanded(child: Text('版本', style: RType.body())),
                     Text('1.0.0', style: RType.muted()),
                   ],
@@ -341,7 +388,7 @@ class _SettingsCard extends StatelessWidget {
           for (var i = 0; i < children.length; i++) ...[
             children[i],
             if (i < children.length - 1)
-              const Divider(
+              Divider(
                 height: 1,
                 indent: 52,
                 color: UberColors.hairline,
@@ -382,7 +429,7 @@ class _NavRow extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon, color: color, size: 22),
-            const SizedBox(width: 14),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,7 +448,7 @@ class _NavRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: UberColors.muted),
+            Icon(Icons.chevron_right_rounded, color: UberColors.muted),
           ],
         ),
       ),
@@ -431,7 +478,7 @@ class _ToggleRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: UberColors.white, size: 22),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
