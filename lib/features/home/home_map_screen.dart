@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:recordo/app/routes.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
@@ -478,7 +479,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                             .read<ParkCatalogCubit>()
                                             .select(p.id),
                                         onOpenDetail: () =>
-                                            context.push('/park/${p.id}'),
+                                            context.push(parkDetailLocation(p.id)),
                                       ),
                                     );
                                   },

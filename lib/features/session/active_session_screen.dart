@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:recordo/app/routes.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
@@ -237,7 +238,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                   children: [
                     if (park != null)
                       TextButton(
-                        onPressed: () => context.push('/park/${park.id}'),
+                        onPressed: () => context.push(parkDetailLocation(park.id)),
                         child: Text('睇場詳情', style: RType.body()),
                       ),
                     const SizedBox(height: 4),
