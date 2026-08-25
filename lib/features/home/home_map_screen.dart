@@ -27,6 +27,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   final _searchKey = GlobalKey();
   final _sheetKey = GlobalKey();
   final _sheetCtrl = DraggableScrollableController();
+  /// Keys so map pin select can [Scrollable.ensureVisible] the list row.
+  final _itemKeys = <String, GlobalKey>{};
 
   /// Avoid setState during sheet drag — full rebuild kills list scroll.
   final _sheetExtent = ValueNotifier<double>(_sheetInit);
@@ -49,10 +51,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   void _onSheet() {
     if (!_sheetCtrl.isAttached) return;
     final s = _sheetCtrl.size;
-    if ((s - _sheetExtent.value).abs() > 0.008) {
-      _sheetExtent.value = s;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
-    }
+    if ((s - _sheetExtent.value).abs() <= 0.008) return;
+    // Never notify during build (DSS fires while tree builds).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_sheetCtrl.isAttached) return;
+      final v = _sheetCtrl.size;
+      if ((v - _sheetExtent.value).abs() > 0.008) {
+        _sheetExtent.value = v;
+      }
+      _measureChrome();
+    });
   }
 
   ({double top, double bottom}) _readBand() {
@@ -93,8 +101,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
 
     if ((topY - _bandTopY.value).abs() > 0.5 ||
         (bottomY - _bandBottomY.value).abs() > 0.5) {
-      _bandTopY.value = topY;
-      _bandBottomY.value = bottomY;
+      final t = topY;
+      final b = bottomY;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if ((t - _bandTopY.value).abs() > 0.5) _bandTopY.value = t;
+        if ((b - _bandBottomY.value).abs() > 0.5) _bandBottomY.value = b;
+      });
     }
     return (top: topY, bottom: bottomY);
   }
@@ -102,6 +115,57 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   void _measureChrome() {
     if (!mounted) return;
     _readBand();
+  }
+
+  GlobalKey _keyForPark(String id) =>
+      _itemKeys.putIfAbsent(id, GlobalKey.new);
+
+  /// Select park + open sheet enough + scroll list so row is visible.
+  Future<void> _selectAndAnchor(String id, List<Park> parks) async {
+    if (!mounted) return;
+    context.read<ParkCatalogCubit>().select(id);
+
+    // Expand sheet so list + CTA readable
+    if (_sheetCtrl.isAttached && _sheetCtrl.size < 0.58) {
+      try {
+        await _sheetCtrl.animateTo(
+          0.65.clamp(_sheetMinWithCta, _sheetMax),
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      } catch (_) {}
+    }
+
+    // Wait layout after select highlight + sheet size
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!mounted) return;
+
+    final ctx = _keyForPark(id).currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: 0.15, // near top of sheet viewport
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+      );
+      return;
+    }
+
+    // Fallback: index * approx row height (if key not built yet)
+    final i = parks.indexWhere((p) => p.id == id);
+    if (i < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final ctx2 = _keyForPark(id).currentContext;
+      if (ctx2 != null && mounted) {
+        await Scrollable.ensureVisible(
+          ctx2,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          alignment: 0.15,
+        );
+      }
+    });
   }
 
   @override
@@ -166,7 +230,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         bandBottomY: _bandBottomY.value,
                         onSelect: (id) {
                           hideKeyboard();
-                          context.read<ParkCatalogCubit>().select(id);
+                          _selectAndAnchor(id, catalog.parks);
                         },
                         onMapInteraction: hideKeyboard,
                         onUserLocation: (ll) => context
@@ -303,11 +367,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                   ),
                   NotificationListener<DraggableScrollableNotification>(
                     onNotification: (n) {
-                      // ValueNotifier only — NO setState
-                      if ((n.extent - _sheetExtent.value).abs() > 0.005) {
-                        _sheetExtent.value = n.extent;
-                        WidgetsBinding.instance
-                            .addPostFrameCallback((_) => _measureChrome());
+                      // Defer — DSS notifies during build; never markNeedsBuild mid-build.
+                      final extent = n.extent;
+                      if ((extent - _sheetExtent.value).abs() > 0.005) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          if ((extent - _sheetExtent.value).abs() > 0.005) {
+                            _sheetExtent.value = extent;
+                          }
+                          _measureChrome();
+                        });
                       }
                       return false;
                     },
@@ -415,6 +484,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                               .read<ParkCatalogCubit>()
                                               .distanceMeters(park);
                                           return Padding(
+                                            key: _keyForPark(park.id),
                                             padding: const EdgeInsets.only(
                                                 bottom: 8),
                                             child: _ParkTile(
@@ -422,9 +492,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                               selected: on,
                                               distance: ParkCatalogCubit
                                                   .formatDistance(dm),
-                                              onTap: () => context
-                                                  .read<ParkCatalogCubit>()
-                                                  .select(park.id),
+                                              onTap: () => _selectAndAnchor(
+                                                park.id,
+                                                catalog.parks,
+                                              ),
                                               onOpenDetail: () => context.push(
                                                 parkDetailLocation(park.id),
                                               ),
