@@ -4,15 +4,8 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'LICENSE'
-      - 'README.md'
-      - 'docs/**'
-      - 'PRD.md'
+  # Manual only — avoid TF quota burn from every main push.
+  # Run: Actions → Deploy → Run workflow
   workflow_dispatch:
     inputs:
       changelog_prefix:

@@ -23,29 +23,25 @@ class HomeMapScreen extends StatefulWidget {
 }
 
 class _HomeMapScreenState extends State<HomeMapScreen> {
-  Timer? _tick;
   final _mapKey = GlobalKey<ParkMapState>();
   final _searchKey = GlobalKey();
   final _sheetKey = GlobalKey();
   final _sheetCtrl = DraggableScrollableController();
-  double _sheetExtent = 0.42;
-  bool _locating = false;
-  double _bandTopY = 120;
-  double _bandBottomY = 500;
 
-  static const _sheetMin = 0.28; // header only
-  static const _sheetMinWithCta = 0.38; // header + slide CTA + safe area
+  /// Avoid setState during sheet drag — full rebuild kills list scroll.
+  final _sheetExtent = ValueNotifier<double>(_sheetInit);
+  final _bandTopY = ValueNotifier<double>(120);
+  final _bandBottomY = ValueNotifier<double>(500);
+  bool _locating = false;
+
+  static const _sheetMin = 0.28;
+  static const _sheetMinWithCta = 0.38;
   static const _sheetInit = 0.42;
   static const _sheetMax = 0.88;
 
   @override
   void initState() {
     super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && context.read<SessionCubit>().state.active != null) {
-        setState(() {});
-      }
-    });
     _sheetCtrl.addListener(_onSheet);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
   }
@@ -53,18 +49,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   void _onSheet() {
     if (!_sheetCtrl.isAttached) return;
     final s = _sheetCtrl.size;
-    if ((s - _sheetExtent).abs() > 0.008) {
-      setState(() => _sheetExtent = s);
+    if ((s - _sheetExtent.value).abs() > 0.008) {
+      _sheetExtent.value = s;
       WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
     }
   }
 
-  /// Dynamic: search bar bottom Y + sheet top Y (the two red lines).
-  /// Returns live values (also updates state when changed).
   ({double top, double bottom}) _readBand() {
     final h = MediaQuery.sizeOf(context).height;
     var topY = h * 0.14;
-    var bottomY = h * (1.0 - _sheetExtent);
+    var bottomY = h * (1.0 - _sheetExtent.value);
 
     final searchBox =
         _searchKey.currentContext?.findRenderObject() as RenderBox?;
@@ -73,8 +67,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       topY = origin.dy + searchBox.size.height;
     }
 
-    final sheetBox =
-        _sheetKey.currentContext?.findRenderObject() as RenderBox?;
+    final sheetBox = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (sheetBox != null && sheetBox.hasSize) {
       bottomY = sheetBox.localToGlobal(Offset.zero).dy;
     } else if (_sheetCtrl.isAttached) {
@@ -86,7 +79,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     if (topY > h) topY = h * 0.14;
     if (bottomY > h) bottomY = h;
     if (bottomY < topY + 100) {
-      // Prefer real sheet fraction so mid stays honest when sheet is tall
       if (_sheetCtrl.isAttached) {
         bottomY = h * (1.0 - _sheetCtrl.size);
       }
@@ -99,19 +91,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       bottomY = h * 0.55;
     }
 
-    if ((topY - _bandTopY).abs() > 0.5 ||
-        (bottomY - _bandBottomY).abs() > 0.5) {
-      // Defer setState — callers may be in build/frame
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if ((topY - _bandTopY).abs() > 0.5 ||
-            (bottomY - _bandBottomY).abs() > 0.5) {
-          setState(() {
-            _bandTopY = topY;
-            _bandBottomY = bottomY;
-          });
-        }
-      });
+    if ((topY - _bandTopY.value).abs() > 0.5 ||
+        (bottomY - _bandBottomY.value).abs() > 0.5) {
+      _bandTopY.value = topY;
+      _bandBottomY.value = bottomY;
     }
     return (top: topY, bottom: bottomY);
   }
@@ -121,13 +104,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     _readBand();
   }
 
-
-
   @override
   void dispose() {
     _sheetCtrl.removeListener(_onSheet);
     _sheetCtrl.dispose();
-    _tick?.cancel();
+    _sheetExtent.dispose();
+    _bandTopY.dispose();
+    _bandBottomY.dispose();
     super.dispose();
   }
 
@@ -145,16 +128,15 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       body: BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
         builder: (context, catalog) {
           return BlocBuilder<SessionCubit, SessionState>(
+            buildWhen: (prev, next) =>
+                prev.active?.id != next.active?.id ||
+                prev.history.length != next.history.length,
             builder: (context, session) {
               final active = session.active;
               final selected = catalog.selected;
               final showCta = active != null || selected != null;
               final sheetMin = showCta ? _sheetMinWithCta : _sheetMin;
-              // Locate FAB sits just above sheet top
-              final sheetH = screenH * _sheetExtent;
-              final locateBottom = sheetH + 12;
 
-              // Keep sheet tall enough for sticky CTA (avoids Column overflow)
               if (showCta &&
                   _sheetCtrl.isAttached &&
                   _sheetCtrl.size + 0.001 < sheetMin) {
@@ -173,35 +155,38 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Full-screen map (tiles need stable non-zero size)
-                  ParkMap(
-                    key: _mapKey,
-                    parks: catalog.parks,
-                    selectedId: catalog.selectedId,
-                    bandTopY: _bandTopY,
-                    bandBottomY: _bandBottomY,
-                    onSelect: (id) {
-                      hideKeyboard();
-                      context.read<ParkCatalogCubit>().select(id);
-                    },
-                    onMapInteraction: hideKeyboard,
-                    onUserLocation: (ll) => context
-                        .read<ParkCatalogCubit>()
-                        .setUserLocation(ll.latitude, ll.longitude),
-                    onPinMoved: (ll) => context
-                        .read<ParkCatalogCubit>()
-                        .setPin(ll.latitude, ll.longitude),
-                    onLocateState: (locating, err) {
-                      if (!mounted) return;
-                      setState(() => _locating = locating);
-                      if (err != null && err.isNotEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(err)),
-                        );
-                      }
+                  ListenableBuilder(
+                    listenable: Listenable.merge([_bandTopY, _bandBottomY]),
+                    builder: (context, _) {
+                      return ParkMap(
+                        key: _mapKey,
+                        parks: catalog.parks,
+                        selectedId: catalog.selectedId,
+                        bandTopY: _bandTopY.value,
+                        bandBottomY: _bandBottomY.value,
+                        onSelect: (id) {
+                          hideKeyboard();
+                          context.read<ParkCatalogCubit>().select(id);
+                        },
+                        onMapInteraction: hideKeyboard,
+                        onUserLocation: (ll) => context
+                            .read<ParkCatalogCubit>()
+                            .setUserLocation(ll.latitude, ll.longitude),
+                        onPinMoved: (ll) => context
+                            .read<ParkCatalogCubit>()
+                            .setPin(ll.latitude, ll.longitude),
+                        onLocateState: (locating, err) {
+                          if (!mounted) return;
+                          setState(() => _locating = locating);
+                          if (err != null && err.isNotEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(err)),
+                            );
+                          }
+                        },
+                      );
                     },
                   ),
-                  // Top floating search (Maps-style) + history
                   SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -267,61 +252,60 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       right: 16,
                       child: GestureDetector(
                         onTap: () => context.push('/session'),
-                        child: _LiveSessionBanner(
-                          label: formatSessionDuration(active.elapsed),
+                        child: _LiveSessionTicker(
                           parkName: active.parkName ?? selected?.name,
+                          startedAt: active.startedAt,
                         ),
                       ),
                     ),
-                  // Locate — always above sheet
-                  Positioned(
-                    right: 16,
-                    bottom: locateBottom,
-                    child: Material(
-                      color: UberColors.sheet.withValues(alpha: 0.95),
-                      shape: const CircleBorder(),
-                      elevation: 4,
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: _locating
-                            ? null
-                            : () {
-                                hideKeyboard();
-                                final band = _readBand();
-                                setState(() {
-                                  _bandTopY = band.top;
-                                  _bandBottomY = band.bottom;
-                                });
-                                // After layout settles map size, center
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  _mapKey.currentState?.centerOnMe();
-                                });
-                              },
-                        child: SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: _locating
-                              ? Padding(
-                                  padding: EdgeInsets.all(14),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: UberColors.white,
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.my_location_rounded,
-                                  color: UberColors.white,
-                                ),
+                  // Locate FAB — only this listens to sheet height
+                  ValueListenableBuilder<double>(
+                    valueListenable: _sheetExtent,
+                    builder: (context, extent, _) {
+                      return Positioned(
+                        right: 16,
+                        bottom: screenH * extent + 12,
+                        child: Material(
+                          color: UberColors.sheet.withValues(alpha: 0.95),
+                          shape: const CircleBorder(),
+                          elevation: 4,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _locating
+                                ? null
+                                : () {
+                                    hideKeyboard();
+                                    _readBand();
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      _mapKey.currentState?.centerOnMe();
+                                    });
+                                  },
+                            child: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: _locating
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(14),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.my_location_rounded,
+                                      color: UberColors.white,
+                                    ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                  // Draggable bottom sheet
                   NotificationListener<DraggableScrollableNotification>(
                     onNotification: (n) {
-                      if ((n.extent - _sheetExtent).abs() > 0.005) {
-                        setState(() => _sheetExtent = n.extent);
+                      // ValueNotifier only — NO setState
+                      if ((n.extent - _sheetExtent.value).abs() > 0.005) {
+                        _sheetExtent.value = n.extent;
                         WidgetsBinding.instance
                             .addPostFrameCallback((_) => _measureChrome());
                       }
@@ -340,7 +324,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         _sheetMax,
                       ],
                       builder: (context, scrollController) {
-                        final showCtaBar = active != null || selected != null;
+                        final showCtaBar =
+                            active != null || selected != null;
                         final ctaPad = showCtaBar
                             ? (active == null ? 120.0 : 80.0) + bottomInset
                             : 12.0 + bottomInset;
@@ -355,9 +340,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                           clipBehavior: Clip.antiAlias,
                           child: Stack(
                             children: [
+                              // Single scroll view owned by DSS controller
                               CustomScrollView(
                                 controller: scrollController,
-                                physics: const ClampingScrollPhysics(),
+                                primary: false,
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
                                 slivers: [
                                   const SliverToBoxAdapter(
                                     child: SizedBox(height: 10),
@@ -367,7 +356,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                       child: Container(
                                         width: 44,
                                         height: 5,
-                                        margin: const EdgeInsets.only(bottom: 6),
+                                        margin:
+                                            const EdgeInsets.only(bottom: 6),
                                         decoration: BoxDecoration(
                                           color: UberColors.hairline,
                                           borderRadius:
@@ -538,14 +528,90 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       ),
     );
   }
+}
 
+/// Isolated ticker so session clock doesn't rebuild sheet/list.
+class _LiveSessionTicker extends StatefulWidget {
+  const _LiveSessionTicker({required this.startedAt, this.parkName});
+  final DateTime startedAt;
+  final String? parkName;
 
-  String formatSessionDuration(Duration d) {
+  @override
+  State<_LiveSessionTicker> createState() => _LiveSessionTickerState();
+}
+
+class _LiveSessionTickerState extends State<_LiveSessionTicker> {
+  Timer? _t;
+
+  @override
+  void initState() {
+    super.initState();
+    _t = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     if (h > 0) return '$h:$m:$s';
     return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = DateTime.now().difference(widget.startedAt);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: UberColors.elevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: UberColors.accent.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: UberColors.accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '計時中',
+                  style: RType.label().copyWith(
+                    color: UberColors.accent,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                Text(
+                  widget.parkName ?? '未選場',
+                  style: RType.body(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Text(_fmt(elapsed), style: RType.titleSm()),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded, color: UberColors.muted, size: 22),
+        ],
+      ),
+    );
   }
 }
 
@@ -567,57 +633,6 @@ class _RoundIcon extends StatelessWidget {
           height: 44,
           child: Icon(icon, color: UberColors.white, size: 22),
         ),
-      ),
-    );
-  }
-}
-
-class _LiveSessionBanner extends StatelessWidget {
-  const _LiveSessionBanner({required this.label, this.parkName});
-  final String label;
-  final String? parkName;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: UberColors.elevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: UberColors.accent.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: UberColors.accent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('計時中', style: RType.label().copyWith(
-                  color: UberColors.accent,
-                  letterSpacing: 1.2,
-                )),
-                Text(
-                  parkName ?? '未選場',
-                  style: RType.body(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Text(label, style: RType.titleSm()),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right_rounded, color: UberColors.muted, size: 22),
-        ],
       ),
     );
   }
@@ -654,7 +669,7 @@ class _ParkTile extends StatelessWidget {
                 Icons.local_parking_rounded,
                 color: selected ? UberColors.accent : UberColors.white,
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
