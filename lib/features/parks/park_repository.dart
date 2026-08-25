@@ -178,12 +178,16 @@ class ParkRepository {
         hourly = remote.hourly ?? hourly;
         daily = remote.daily ?? daily;
         night = remote.night ?? night;
+        if (remote.priceNote.isNotEmpty) priceNote = remote.priceNote;
         confirms = remote.confirms;
         updated = remote.updatedAt ?? updated;
         source = 'ugc-remote';
       } else {
         // still take higher confirm count
         if (remote.confirms > confirms) confirms = remote.confirms;
+        if (priceNote.isEmpty && remote.priceNote.isNotEmpty) {
+          priceNote = remote.priceNote;
+        }
       }
     }
 
@@ -258,6 +262,7 @@ class ParkRepository {
       hourly: hourly ?? (existing['hourlyHkd'] as num?)?.toDouble(),
       daily: daily ?? (existing['dailyHkd'] as num?)?.toDouble(),
       night: night ?? (existing['nightHkd'] as num?)?.toDouble(),
+      priceNote: noteOut.isEmpty ? null : noteOut,
       confirmOnly: confirmOnly,
     );
   }

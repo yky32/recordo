@@ -50,3 +50,9 @@ ios/build/
 .env.*
 *.pem
 
+
+# Local secrets / runners
+scripts/local/
+.env.supabase
+.env.supabase.*
+

@@ -28,10 +28,22 @@ end
 
 def flutter_git_define_args
   sha = git_commit_sha
-  return "" if sha.empty?
-
-  UI.message("🔖 Embedding GIT_COMMIT=#{sha[0, 7]}…")
-  "--dart-define=GIT_COMMIT=#{sha}"
+  parts = []
+  unless sha.empty?
+    UI.message("🔖 Embedding GIT_COMMIT=#{sha[0, 7]}…")
+    parts << "--dart-define=GIT_COMMIT=#{sha}"
+  end
+  # Optional common DB (GitHub Actions secrets)
+  sb_url = ENV["SUPABASE_URL"].to_s.strip
+  sb_key = ENV["SUPABASE_ANON_KEY"].to_s.strip
+  if !sb_url.empty? && !sb_key.empty?
+    UI.message("☁️  Embedding Supabase dart-defines for TF")
+    parts << "--dart-define=SUPABASE_URL=#{sb_url}"
+    parts << "--dart-define=SUPABASE_ANON_KEY=#{sb_key}"
+  else
+    UI.important("☁️  No SUPABASE_URL/ANON_KEY — TF build is local-UGC only")
+  end
+  parts.join(" ")
 end
 
 def path_for_system_ruby

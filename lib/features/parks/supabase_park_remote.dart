@@ -17,6 +17,7 @@ class SupabaseParkRemote {
           hourly: (m['hourly_hkd'] as num?)?.toDouble(),
           daily: (m['daily_hkd'] as num?)?.toDouble(),
           night: (m['night_hkd'] as num?)?.toDouble(),
+          priceNote: (m['price_note'] as String?)?.trim() ?? '',
           confirms: m['ugc_confirms'] as int? ?? 1,
           updatedAt: m['price_updated_at'] != null
               ? DateTime.tryParse(m['price_updated_at'] as String)
@@ -47,6 +48,7 @@ class SupabaseParkRemote {
           lat: (m['lat'] as num).toDouble(),
           lng: (m['lng'] as num).toDouble(),
           heightM: (m['height_m'] as num?)?.toDouble(),
+          priceNote: (m['note'] as String?)?.trim() ?? '',
           source: 'ugc-remote',
         );
       }).toList();
@@ -60,6 +62,7 @@ class SupabaseParkRemote {
     double? hourly,
     double? daily,
     double? night,
+    String? priceNote,
     bool confirmOnly = false,
   }) async {
     final c = RecordoSupabase.client;
@@ -70,6 +73,7 @@ class SupabaseParkRemote {
         'hourly_hkd': hourly,
         'daily_hkd': daily,
         'night_hkd': night,
+        'price_note': priceNote,
         'confirm_only': confirmOnly,
       });
       return true;
@@ -104,6 +108,7 @@ class RemoteParkPrice {
     this.hourly,
     this.daily,
     this.night,
+    this.priceNote = '',
     this.confirms = 1,
     this.updatedAt,
   });
@@ -111,6 +116,7 @@ class RemoteParkPrice {
   final double? hourly;
   final double? daily;
   final double? night;
+  final String priceNote;
   final int confirms;
   final DateTime? updatedAt;
 }
