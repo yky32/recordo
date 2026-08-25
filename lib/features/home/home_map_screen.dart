@@ -399,13 +399,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       initialChildSize: _sheetInit,
                       minChildSize: sheetMin,
                       maxChildSize: _sheetMax,
-                      snap: true,
-                      snapSizes: [
-                        sheetMin,
-                        _sheetInit,
-                        0.65,
-                        _sheetMax,
-                      ],
+                      snap: false, // drag free — stop at release height
                       builder: (context, scrollController) {
                         final showCtaBar =
                             active != null || selected != null;
