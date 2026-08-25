@@ -35,20 +35,45 @@ class Park {
 
   bool get hasPriceNote => priceNote.trim().isNotEmpty;
 
+  /// List / hero line — median-style display with report count when known.
   String get priceSummary {
-    if (hourlyHkd != null) return 'HK\$${hourlyHkd!.toStringAsFixed(0)}/時';
-    if (dailyHkd != null) return 'HK\$${dailyHkd!.toStringAsFixed(0)}/日';
-    if (nightHkd != null) return '夜泊 HK\$${nightHkd!.toStringAsFixed(0)}';
+    if (hourlyHkd != null) {
+      final x = hourlyHkd!.toStringAsFixed(0);
+      if (ugcConfirms >= 2) return '約 HK\$$x/時 · $ugcConfirms 人';
+      if (ugcConfirms == 1) return '約 HK\$$x/時 · 1 人';
+      return '約 HK\$$x/時';
+    }
+    if (dailyHkd != null) {
+      final x = dailyHkd!.toStringAsFixed(0);
+      if (ugcConfirms >= 2) return '約 HK\$$x/日 · $ugcConfirms 人';
+      return '約 HK\$$x/日';
+    }
+    if (nightHkd != null) {
+      return '夜泊約 HK\$${nightHkd!.toStringAsFixed(0)}';
+    }
     return '未有收費';
+  }
+
+  /// Trust copy under the price.
+  String get trustLabel {
+    if (!hasPrice) return '未有人更新 · 你可以做第一個';
+    if (ugcConfirms >= 8) return '較多司機報告 · 中位參考價';
+    if (ugcConfirms >= 3) return '$ugcConfirms 人報告 · 中位參考價';
+    if (ugcConfirms == 2) return '2 人報告 · 仍可能有偏差';
+    if (ugcConfirms == 1) return '只有 1 人報告 · 僅供參考';
+    return freshnessLabel;
   }
 
   String get freshnessLabel {
     final t = priceUpdatedAt;
-    if (t == null) return '未有人更新';
+    if (t == null) {
+      return ugcConfirms > 0 ? '$ugcConfirms 人報告' : '未有人更新';
+    }
     final d = DateTime.now().difference(t);
-    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前更新';
-    if (d.inHours < 48) return '${d.inHours} 小時前更新';
-    return '${d.inDays} 日前 · $ugcConfirms 人確認';
+    final who = ugcConfirms > 0 ? ' · $ugcConfirms 人' : '';
+    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前更新$who';
+    if (d.inHours < 48) return '${d.inHours} 小時前更新$who';
+    return '${d.inDays} 日前更新$who';
   }
 
   Park copyWith({

@@ -5,6 +5,7 @@ import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
 
 /// Parks = OSM skeleton + seed prices + local UGC + optional Supabase UGC.
@@ -156,9 +157,13 @@ class ParkRepository {
     // Local wins if newer or only local
     if (localRaw is Map) {
       final m = Map<String, dynamic>.from(localRaw);
-      hourly = (m['hourlyHkd'] as num?)?.toDouble() ?? hourly;
-      daily = (m['dailyHkd'] as num?)?.toDouble() ?? daily;
-      night = (m['nightHkd'] as num?)?.toDouble() ?? night;
+      hourly = PriceGuard.clampHourly(
+            (m['hourlyHkd'] as num?)?.toDouble()) ??
+          hourly;
+      daily =
+          PriceGuard.clampDaily((m['dailyHkd'] as num?)?.toDouble()) ?? daily;
+      night =
+          PriceGuard.clampNight((m['nightHkd'] as num?)?.toDouble()) ?? night;
       confirms = m['ugcConfirms'] as int? ?? confirms;
       updated = m['priceUpdatedAt'] != null
           ? DateTime.tryParse(m['priceUpdatedAt'] as String) ?? updated
@@ -227,6 +232,7 @@ class ParkRepository {
   }
 
   /// Returns true if shared to Supabase (false = local only / offline / no key).
+  /// Throws [ArgumentError] with message if out of [PriceGuard] range.
   Future<bool> reportPrice({
     required String parkId,
     double? hourly,
@@ -235,6 +241,24 @@ class ParkRepository {
     String? priceNote,
     bool confirmOnly = false,
   }) async {
+    final err = PriceGuard.validateReport(
+      hourly: hourly,
+      daily: daily,
+      night: night,
+      note: priceNote,
+      confirmOnly: confirmOnly,
+    );
+    if (err != null) {
+      throw ArgumentError(err);
+    }
+
+    final h = PriceGuard.clampHourly(hourly);
+    final d = PriceGuard.clampDaily(daily);
+    final n = PriceGuard.clampNight(night);
+    final noteClamped = priceNote != null
+        ? PriceGuard.clampNote(priceNote)
+        : null;
+
     // 1) Always local (offline OK)
     final map = Map<String, dynamic>.from(
       Bootstrap.store.getJsonMap(StorageKeys.ugcPrices) ?? {},
@@ -243,13 +267,13 @@ class ParkRepository {
         ? Map<String, dynamic>.from(map[parkId] as Map)
         : <String, dynamic>{};
     final confirms = (existing['ugcConfirms'] as int? ?? 0) + 1;
-    final noteOut = priceNote != null
-        ? priceNote.trim()
+    final noteOut = noteClamped != null
+        ? noteClamped
         : (existing['priceNote'] as String? ?? '');
     map[parkId] = {
-      'hourlyHkd': hourly ?? existing['hourlyHkd'],
-      'dailyHkd': daily ?? existing['dailyHkd'],
-      'nightHkd': night ?? existing['nightHkd'],
+      'hourlyHkd': h ?? existing['hourlyHkd'],
+      'dailyHkd': d ?? existing['dailyHkd'],
+      'nightHkd': n ?? existing['nightHkd'],
       'priceNote': noteOut,
       'ugcConfirms': confirms,
       'priceUpdatedAt': DateTime.now().toUtc().toIso8601String(),
@@ -260,9 +284,9 @@ class ParkRepository {
     // 2) Best-effort Supabase
     return _remote.insertPriceReport(
       parkId: parkId,
-      hourly: hourly ?? (existing['hourlyHkd'] as num?)?.toDouble(),
-      daily: daily ?? (existing['dailyHkd'] as num?)?.toDouble(),
-      night: night ?? (existing['nightHkd'] as num?)?.toDouble(),
+      hourly: h ?? (existing['hourlyHkd'] as num?)?.toDouble(),
+      daily: d ?? (existing['dailyHkd'] as num?)?.toDouble(),
+      night: n ?? (existing['nightHkd'] as num?)?.toDouble(),
       priceNote: noteOut.isEmpty ? null : noteOut,
       confirmOnly: confirmOnly,
     );

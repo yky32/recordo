@@ -7,6 +7,7 @@ import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -67,26 +68,57 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
   Future<void> _submit(BuildContext context, Park p) async {
     FocusManager.instance.primaryFocus?.unfocus();
-    double? parse(TextEditingController c) => double.tryParse(c.text.trim());
-    final cloud = await context.read<ParkCatalogCubit>().reportPrice(
-          parkId: p.id,
-          hourly: parse(_hourly) ?? p.hourlyHkd,
-          daily: parse(_daily) ?? p.dailyHkd,
-          night: parse(_night) ?? p.nightHkd,
-          priceNote: _note.text.trim(),
-        );
-    HapticFeedback.mediumImpact();
-    if (context.mounted) {
-      setState(() => _editing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            cloud
-                ? '已更新場價 · 已分享給其他 Recordo 用戶'
-                : '已更新場價（本機 · 連雲端失敗或未設定）',
+    double? parse(TextEditingController c) {
+      final t = c.text.trim();
+      if (t.isEmpty) return null;
+      return double.tryParse(t);
+    }
+
+    final hourly = parse(_hourly);
+    final daily = parse(_daily);
+    final night = parse(_night);
+    final note = _note.text.trim();
+
+    final err = PriceGuard.validateReport(
+      hourly: hourly,
+      daily: daily,
+      night: night,
+      note: note,
+    );
+    if (err != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      }
+      return;
+    }
+
+    try {
+      final cloud = await context.read<ParkCatalogCubit>().reportPrice(
+            parkId: p.id,
+            hourly: hourly,
+            daily: daily,
+            night: night,
+            priceNote: note,
+          );
+      HapticFeedback.mediumImpact();
+      if (context.mounted) {
+        setState(() => _editing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              cloud
+                  ? '已更新場價 · 已分享給其他 Recordo 用戶'
+                  : '已更新場價（本機 · 連雲端失敗或未設定）',
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } on ArgumentError catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message?.toString() ?? '價錢無效')),
+        );
+      }
     }
   }
 
@@ -183,12 +215,15 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              p.hasPrice
-                                  ? p.freshnessLabel
-                                  : '未有人報過 · 你可以做第一個',
+                              p.trustLabel,
                               style: RType.muted(),
                             ),
                             if (p.hasPrice) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                p.freshnessLabel,
+                                style: RType.muted(),
+                              ),
                               const SizedBox(height: 14),
                               Divider(height: 1, color: UberColors.hairline),
                               SizedBox(height: 12),
@@ -285,11 +320,20 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         SizedBox(height: 18),
                         Text('更新收費', style: RType.titleSm()),
                         const SizedBox(height: 12),
-                        _field(_hourly, '時租 HK\$'),
+                        _field(
+                          _hourly,
+                          '時租 HK\$（${PriceGuard.hourlyMin.toInt()}–${PriceGuard.hourlyMax.toInt()}）',
+                        ),
                         const SizedBox(height: 10),
-                        _field(_daily, '日泊 HK\$（可空）'),
+                        _field(
+                          _daily,
+                          '日泊 HK\$（可空 · ${PriceGuard.dailyMin.toInt()}–${PriceGuard.dailyMax.toInt()}）',
+                        ),
                         const SizedBox(height: 10),
-                        _field(_night, '夜泊 HK\$（可空）'),
+                        _field(
+                          _night,
+                          '夜泊 HK\$（可空 · ${PriceGuard.nightMin.toInt()}–${PriceGuard.nightMax.toInt()}）',
+                        ),
                         const SizedBox(height: 10),
                         _field(
                           _note,

@@ -74,6 +74,10 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   Future<void> load() async {
     emit(state.copyWith(loading: true));
     await _repo.ensureLoaded();
+    // Open app / resume: always try pull shared prices (no manual refresh needed)
+    try {
+      await _repo.refreshRemote();
+    } catch (_) {}
     final all = _repo.allWithUgc();
     emit(
       state.copyWith(
