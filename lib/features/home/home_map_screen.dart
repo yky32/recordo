@@ -123,7 +123,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   /// Select park + open sheet enough + scroll list so row is visible.
   Future<void> _selectAndAnchor(String id, List<Park> parks) async {
     if (!mounted) return;
-    context.read<ParkCatalogCubit>().select(id);
+    final cubit = context.read<ParkCatalogCubit>();
+    cubit.select(id);
 
     // Expand sheet so list + CTA readable
     if (_sheetCtrl.isAttached && _sheetCtrl.size < 0.58) {
@@ -152,12 +153,10 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
       return;
     }
 
-    // Fallback: index * approx row height (if key not built yet)
-    final i = parks.indexWhere((p) => p.id == id);
-    if (i < 0) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final ctx2 = _keyForPark(id).currentContext;
-      if (ctx2 != null && mounted) {
+      if (ctx2 != null) {
         await Scrollable.ensureVisible(
           ctx2,
           duration: const Duration(milliseconds: 280),
