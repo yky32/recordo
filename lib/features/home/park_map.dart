@@ -84,7 +84,8 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Place [ll] at mid of search-bottom ↔ sheet-top (optical mid).
+  /// Place [ll] in the upper part of search↔sheet band (not mid —
+  /// mid sits on the sheet lip and "almost blocks" the pin).
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
     final z = (zoom ?? 15.5).clamp(14.0, 16.5);
@@ -96,9 +97,10 @@ class ParkMapState extends State<ParkMap> {
       top = h * 0.14;
       bottom = h * 0.55;
     }
-    final midY = (top + bottom) / 2.0;
+    // ~30% down the visible band → clear of sheet top + CTA
+    final targetY = top + (bottom - top) * 0.30;
     // flutter_map: +offset.y moves point DOWN on screen
-    final offsetY = midY - h / 2;
+    final offsetY = targetY - h / 2;
 
     _programmaticMove = true;
     try {
