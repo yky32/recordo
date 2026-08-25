@@ -8,6 +8,7 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/session/session_cubit.dart';
 
 /// Park detail — map hero + price card + actions. No bottom dual CTA bar.
 class ParkDetailScreen extends StatefulWidget {
@@ -24,12 +25,14 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   final _hourly = TextEditingController();
   final _daily = TextEditingController();
   final _night = TextEditingController();
+  final _note = TextEditingController();
 
   @override
   void dispose() {
     _hourly.dispose();
     _daily.dispose();
     _night.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -37,6 +40,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     _hourly.text = p.hourlyHkd?.toStringAsFixed(0) ?? '';
     _daily.text = p.dailyHkd?.toStringAsFixed(0) ?? '';
     _night.text = p.nightHkd?.toStringAsFixed(0) ?? '';
+    _note.text = p.priceNote;
   }
 
   Future<void> _confirm(BuildContext context, Park p) async {
@@ -63,6 +67,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
           hourly: parse(_hourly) ?? p.hourlyHkd,
           daily: parse(_daily) ?? p.dailyHkd,
           night: parse(_night) ?? p.nightHkd,
+          priceNote: _note.text.trim(),
         );
     HapticFeedback.mediumImpact();
     if (context.mounted) {
@@ -177,6 +182,12 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               SizedBox(height: 12),
                               _PriceBreakdown(park: p),
                             ],
+                            if (p.hasPriceNote) ...[
+                              const SizedBox(height: 12),
+                              Text('收費備註', style: RType.label()),
+                              const SizedBox(height: 4),
+                              Text(p.priceNote, style: RType.body()),
+                            ],
                             if (p.heightM != null) ...[
                               const SizedBox(height: 10),
                               Text(
@@ -187,6 +198,9 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                           ],
                         ),
                       ),
+
+                      const SizedBox(height: 12),
+                      _PaidHistoryCard(parkId: p.id),
 
                       const SizedBox(height: 14),
                       Text(
@@ -236,7 +250,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               child: _ActionHalf(
                                 icon: Icons.edit_outlined,
                                 title: '改收費',
-                                subtitle: '時 / 日 / 夜',
+                                subtitle: '時 / 日 / 夜 / 備註',
                                 onTap: () {
                                   setState(() {
                                     _editing = true;
@@ -264,6 +278,13 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         _field(_daily, '日泊 HK\$（可空）'),
                         const SizedBox(height: 10),
                         _field(_night, '夜泊 HK\$（可空）'),
+                        const SizedBox(height: 10),
+                        _field(
+                          _note,
+                          '備註 · 例如：首小時 \$30 · 之後每半鐘 \$15',
+                          maxLines: 3,
+                          keyboardType: TextInputType.multiline,
+                        ),
                         const SizedBox(height: 14),
                         SizedBox(
                           width: double.infinity,
@@ -292,15 +313,23 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     );
   }
 
-  Widget _field(TextEditingController c, String label) {
+  Widget _field(
+    TextEditingController c,
+    String label, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+  }) {
     return TextField(
       controller: c,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      maxLines: maxLines,
+      keyboardType: keyboardType ??
+          const TextInputType.numberWithOptions(decimal: true),
       style: RType.body(),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: RType.muted(),
+        alignLabelWithHint: maxLines > 1,
         filled: true,
         fillColor: UberColors.elevated,
         border: OutlineInputBorder(
@@ -308,6 +337,78 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
           borderSide: BorderSide.none,
         ),
       ),
+    );
+  }
+}
+
+/// Recent real payments from local session history (this device).
+class _PaidHistoryCard extends StatelessWidget {
+  const _PaidHistoryCard({required this.parkId});
+  final String parkId;
+
+  String _fmtDur(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    if (h > 0) return '$h 小時 $m 分';
+    return '$m 分鐘';
+  }
+
+  String _fmtWhen(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前';
+    if (d.inHours < 48) return '${d.inHours} 小時前';
+    return '${d.inDays} 日前';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<SessionCubit, SessionState>(
+      builder: (context, session) {
+        final paid =
+            context.read<SessionCubit>().paidSessionsForPark(parkId);
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+          decoration: BoxDecoration(
+            color: UberColors.elevated,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: UberColors.hairline.withValues(alpha: 0.6),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('最近實付', style: RType.label()),
+              const SizedBox(height: 6),
+              if (paid.isEmpty)
+                Text(
+                  '完結計時並填收費後，會出現喺呢度 · 幫你知真實落閘幾錢',
+                  style: RType.muted(),
+                )
+              else ...[
+                for (var i = 0; i < paid.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'HK\$${paid[i].amountHkd!.toStringAsFixed(0)} · ${_fmtDur(paid[i].elapsed)}',
+                          style: RType.body(),
+                        ),
+                      ),
+                      Text(
+                        _fmtWhen(paid[i].endedAt!),
+                        style: RType.muted(),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

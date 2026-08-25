@@ -151,6 +151,7 @@ class ParkRepository {
     var confirms = p.ugcConfirms;
     DateTime? updated = p.priceUpdatedAt;
     var source = p.source;
+    var priceNote = p.priceNote;
 
     // Local wins if newer or only local
     if (localRaw is Map) {
@@ -162,6 +163,8 @@ class ParkRepository {
       updated = m['priceUpdatedAt'] != null
           ? DateTime.tryParse(m['priceUpdatedAt'] as String) ?? updated
           : updated;
+      final n = m['priceNote'] as String?;
+      if (n != null && n.trim().isNotEmpty) priceNote = n.trim();
       source = p.source.startsWith('ugc') ? p.source : 'ugc';
     }
 
@@ -191,6 +194,7 @@ class ParkRepository {
       ugcConfirms: confirms,
       priceUpdatedAt: updated,
       source: source,
+      priceNote: priceNote,
     );
   }
 
@@ -223,6 +227,7 @@ class ParkRepository {
     double? hourly,
     double? daily,
     double? night,
+    String? priceNote,
     bool confirmOnly = false,
   }) async {
     // 1) Always local (offline OK)
@@ -233,10 +238,14 @@ class ParkRepository {
         ? Map<String, dynamic>.from(map[parkId] as Map)
         : <String, dynamic>{};
     final confirms = (existing['ugcConfirms'] as int? ?? 0) + 1;
+    final noteOut = priceNote != null
+        ? priceNote.trim()
+        : (existing['priceNote'] as String? ?? '');
     map[parkId] = {
       'hourlyHkd': hourly ?? existing['hourlyHkd'],
       'dailyHkd': daily ?? existing['dailyHkd'],
       'nightHkd': night ?? existing['nightHkd'],
+      'priceNote': noteOut,
       'ugcConfirms': confirms,
       'priceUpdatedAt': DateTime.now().toUtc().toIso8601String(),
       'confirmOnly': confirmOnly,
