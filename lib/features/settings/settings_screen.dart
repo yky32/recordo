@@ -111,40 +111,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   showModalBottomSheet<void>(
                     context: context,
-                    backgroundColor: UberColors.elevated,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(20)),
-                    ),
-                    builder: (ctx) => Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: UberColors.hairline,
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text('更新場價', style: RType.title()),
-                          const SizedBox(height: 12),
-                          Text(
-                            '1. 地圖列表揀一個場\n'
-                            '2. 撳「>」入詳情\n'
-                            '3.「價錢仍然啱」或「改收費」\n'
-                            '4. 泊完填 HK\$ 可順手更新',
-                            style: RType.body(),
-                          ),
-                        ],
-                      ),
-                    ),
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (ctx) => const _UpdatePriceHowToSheet(),
                   );
                 },
               ),
@@ -354,6 +323,221 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Uber-style how-to sheet for updating park prices.
+class _UpdatePriceHowToSheet extends StatelessWidget {
+  const _UpdatePriceHowToSheet();
+
+  static const _steps = <(IconData, String, String)>[
+    (
+      Icons.map_outlined,
+      '地圖揀場',
+      '列表或 pin 揀你泊緊／想報嘅停車場',
+    ),
+    (
+      Icons.chevron_right_rounded,
+      '入詳情',
+      '撳列尾「>」或 pin 後開場詳情',
+    ),
+    (
+      Icons.price_change_outlined,
+      '確認或改收費',
+      '「價錢仍然啱」一撳確認 · 或「改收費」填時／日／夜／備註',
+    ),
+    (
+      Icons.timer_outlined,
+      '泊完順手更新',
+      '結束計時填實付 HK\$ · 會寫入最近實付，其他人更有用',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Container(
+      decoration: BoxDecoration(
+        color: UberColors.sheet,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 10, 20, 16 + bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: UberColors.hairline,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: UberColors.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.price_change_rounded,
+                      color: UberColors.accent,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('更新場價', style: RType.titleSm()),
+                        const SizedBox(height: 2),
+                        Text(
+                          '司機報價 · 幫大家知真實收費',
+                          style: RType.muted(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              for (var i = 0; i < _steps.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _HowToStep(
+                  index: i + 1,
+                  icon: _steps[i].$1,
+                  title: _steps[i].$2,
+                  body: _steps[i].$3,
+                  isLast: i == _steps.length - 1,
+                ),
+              ],
+              const SizedBox(height: 22),
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: UberColors.ctaFill,
+                    foregroundColor: UberColors.ctaOnFill,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('知喇'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HowToStep extends StatelessWidget {
+  const _HowToStep({
+    required this.index,
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.isLast,
+  });
+
+  final int index;
+  final IconData icon;
+  final String title;
+  final String body;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: UberColors.elevated2,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: UberColors.accent.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$index',
+                style: RType.label().copyWith(
+                  color: UberColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 28,
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                color: UberColors.hairline.withValues(alpha: 0.8),
+              ),
+          ],
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: UberColors.elevated,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: UberColors.hairline.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 22, color: UberColors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: RType.body()),
+                      const SizedBox(height: 4),
+                      Text(body, style: RType.muted()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
