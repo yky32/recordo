@@ -190,7 +190,8 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     return '${(meters / 1000).toStringAsFixed(1)} km';
   }
 
-  Future<void> reportPrice({
+  /// true = also pushed to shared Supabase DB.
+  Future<bool> reportPrice({
     required String parkId,
     double? hourly,
     double? daily,
@@ -198,7 +199,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     String? priceNote,
     bool confirmOnly = false,
   }) async {
-    await _repo.reportPrice(
+    final cloud = await _repo.reportPrice(
       parkId: parkId,
       hourly: hourly,
       daily: daily,
@@ -208,6 +209,18 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     );
     await load();
     select(parkId);
+    return cloud;
+  }
+
+  /// Pull latest shared UGC prices / new parks from Supabase.
+  Future<bool> syncFromCloud() async {
+    try {
+      await _repo.refreshRemote();
+      await load();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> reportNewPark({

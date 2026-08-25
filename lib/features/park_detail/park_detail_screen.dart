@@ -44,7 +44,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   }
 
   Future<void> _confirm(BuildContext context, Park p) async {
-    await context.read<ParkCatalogCubit>().reportPrice(
+    final cloud = await context.read<ParkCatalogCubit>().reportPrice(
           parkId: p.id,
           hourly: p.hourlyHkd,
           daily: p.dailyHkd,
@@ -54,7 +54,13 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     HapticFeedback.lightImpact();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('多謝 · 已確認價錢仍然啱')),
+        SnackBar(
+          content: Text(
+            cloud
+                ? '多謝 · 已確認，並分享到雲端'
+                : '多謝 · 已確認（本機 · 稍後有網會再同步）',
+          ),
+        ),
       );
     }
   }
@@ -62,7 +68,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   Future<void> _submit(BuildContext context, Park p) async {
     FocusManager.instance.primaryFocus?.unfocus();
     double? parse(TextEditingController c) => double.tryParse(c.text.trim());
-    await context.read<ParkCatalogCubit>().reportPrice(
+    final cloud = await context.read<ParkCatalogCubit>().reportPrice(
           parkId: p.id,
           hourly: parse(_hourly) ?? p.hourlyHkd,
           daily: parse(_daily) ?? p.dailyHkd,
@@ -73,7 +79,13 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     if (context.mounted) {
       setState(() => _editing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已更新場價')),
+        SnackBar(
+          content: Text(
+            cloud
+                ? '已更新場價 · 已分享給其他 Recordo 用戶'
+                : '已更新場價（本機 · 連雲端失敗或未設定）',
+          ),
+        ),
       );
     }
   }

@@ -226,7 +226,8 @@ class ParkRepository {
     }
   }
 
-  Future<void> reportPrice({
+  /// Returns true if shared to Supabase (false = local only / offline / no key).
+  Future<bool> reportPrice({
     required String parkId,
     double? hourly,
     double? daily,
@@ -257,7 +258,7 @@ class ParkRepository {
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, map);
 
     // 2) Best-effort Supabase
-    await _remote.insertPriceReport(
+    return _remote.insertPriceReport(
       parkId: parkId,
       hourly: hourly ?? (existing['hourlyHkd'] as num?)?.toDouble(),
       daily: daily ?? (existing['dailyHkd'] as num?)?.toDouble(),
