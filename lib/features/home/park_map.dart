@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,13 +9,15 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park.dart';
 
-/// Map fills only the visible band (parent positions it).
-/// Plain [move] centers on geometric mid == optical mid of search↔sheet.
+/// Full-screen map. Parent overlays search/sheet.
+/// [centerOn] places target on optical mid of [bandTopY]↔[bandBottomY].
 class ParkMap extends StatefulWidget {
   const ParkMap({
     super.key,
     required this.parks,
     this.selectedId,
+    this.bandTopY = 120,
+    this.bandBottomY = 500,
     this.onSelect,
     this.onUserLocation,
     this.onPinMoved,
@@ -24,6 +27,8 @@ class ParkMap extends StatefulWidget {
 
   final List<Park> parks;
   final String? selectedId;
+  final double bandTopY;
+  final double bandBottomY;
   final ValueChanged<String>? onSelect;
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
@@ -47,8 +52,10 @@ class ParkMapState extends State<ParkMap> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => locate(forceCamera: true));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      locate(forceCamera: true);
+    });
   }
 
   @override
@@ -77,15 +84,40 @@ class ParkMapState extends State<ParkMap> {
     _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
   }
 
-  /// Map widget is already only the visible band → plain center is correct.
+  /// Place [ll] at mid of search-bottom ↔ sheet-top (optical mid).
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
     final z = (zoom ?? 15.5).clamp(14.0, 16.5);
+    final h = MediaQuery.sizeOf(context).height;
+
+    var top = widget.bandTopY;
+    var bottom = widget.bandBottomY;
+    if (!top.isFinite || !bottom.isFinite || bottom <= top + 60) {
+      top = h * 0.14;
+      bottom = h * 0.55;
+    }
+    final midY = (top + bottom) / 2.0;
+    // flutter_map: +offset.y moves point DOWN on screen
+    final offsetY = midY - h / 2;
+
     _programmaticMove = true;
     try {
-      _map.move(ll, z);
-    } catch (_) {}
-    Future<void>.delayed(const Duration(milliseconds: 120), () {
+      final cam = _map.camera;
+      final newPoint = cam.projectAtZoom(ll, z);
+      final center = cam.unprojectAtZoom(newPoint - Offset(0, offsetY), z);
+      if (!_map.move(center, z)) {
+        _map.move(ll, z, offset: Offset(0, offsetY));
+      }
+    } catch (_) {
+      try {
+        _map.move(ll, z, offset: Offset(0, offsetY));
+      } catch (_) {
+        try {
+          _map.move(ll, z);
+        } catch (_) {}
+      }
+    }
+    Future<void>.delayed(const Duration(milliseconds: 150), () {
       _programmaticMove = false;
     });
   }
@@ -139,7 +171,6 @@ class ParkMapState extends State<ParkMap> {
         return;
       }
 
-      // Sim far from HK (e.g. Apple default US) → keep map useful for dogfood
       final hk = Geolocator.distanceBetween(
         pos.latitude,
         pos.longitude,
@@ -147,7 +178,6 @@ class ParkMapState extends State<ParkMap> {
         hkCenter.longitude,
       );
       if (hk > 500000) {
-        // >500km from HK — use Wan Chai demo pin for local park list
         pos = Position(
           longitude: 114.1747,
           latitude: 22.2783,
@@ -179,7 +209,7 @@ class ParkMapState extends State<ParkMap> {
             hkCenter.latitude,
             hkCenter.longitude,
           );
-          if (d > 500000) return; // ignore far stream when using demo pin
+          if (d > 500000) return;
           _applyPosition(p, moveCamera: false);
         },
         onError: (_) {},
@@ -243,6 +273,7 @@ class ParkMapState extends State<ParkMap> {
     return ListenableBuilder(
       listenable: ThemeController.instance,
       builder: (context, _) {
+        final tileUrl = UberColors.mapTileUrl;
         return FlutterMap(
           mapController: _map,
           options: MapOptions(
@@ -259,11 +290,20 @@ class ParkMapState extends State<ParkMap> {
           ),
           children: [
             TileLayer(
-              key: ValueKey(UberColors.mapTileUrl),
-              urlTemplate: UberColors.mapTileUrl,
+              key: ValueKey(tileUrl),
+              // No {r} — retina @2x broke some CDN paths on device
+              urlTemplate: tileUrl,
+              fallbackUrl:
+                  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.recordo',
-              retinaMode: RetinaMode.isHighDensity(context),
+              retinaMode: false,
+              maxNativeZoom: 19,
+              errorTileCallback: (tile, error, stackTrace) {
+                if (kDebugMode) {
+                  debugPrint('Tile error ${tile.coordinates}: $error');
+                }
+              },
             ),
             MarkerLayer(markers: markers),
           ],

@@ -57,8 +57,8 @@ abstract final class UberColors {
   static Color get ctaOnFill =>
       _dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 
-  /// CARTO basemap
+  /// CARTO basemap — plain PNG (no {r} retina token; more reliable on iOS).
   static String get mapTileUrl => _dark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
 }
