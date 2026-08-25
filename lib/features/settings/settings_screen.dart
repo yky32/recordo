@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
@@ -7,6 +8,7 @@ import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uber-style settings hub.
@@ -307,13 +309,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       size: 22,
                     ),
                     const SizedBox(width: 14),
-                    Expanded(child: Text('雲端 UGC', style: RType.body())),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('雲端 UGC', style: RType.body()),
+                          Text(
+                            RecordoSupabase.isReady
+                                ? '大家更新場價 · 互相看到'
+                                : '未設定 · 只有本機',
+                            style: RType.muted(),
+                          ),
+                        ],
+                      ),
+                    ),
                     Text(
-                      RecordoSupabase.isReady ? 'Supabase 已連' : '本機 only',
+                      RecordoSupabase.isReady ? '已連' : '本機',
                       style: RType.muted(),
                     ),
                   ],
                 ),
+              ),
+              _NavRow(
+                icon: Icons.sync_rounded,
+                title: '同步最新場價',
+                subtitle: RecordoSupabase.isReady
+                    ? '拉其他用戶分享嘅收費'
+                    : '要先設定 Supabase',
+                onTap: () async {
+                  if (!RecordoSupabase.isReady) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('呢個 build 未接雲端 · 見 docs/SUPABASE.md'),
+                      ),
+                    );
+                    return;
+                  }
+                  HapticFeedback.selectionClick();
+                  final ok =
+                      await context.read<ParkCatalogCubit>().syncFromCloud();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok ? '已同步最新停車場資訊' : '同步失敗 · 檢查網絡',
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
