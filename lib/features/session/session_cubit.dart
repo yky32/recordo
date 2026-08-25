@@ -105,4 +105,20 @@ class SessionCubit extends Cubit<SessionState> {
     emit(SessionState(active: null, history: history));
     await LiveActivityService.instance.end();
   }
+
+  /// Completed sessions for a park with amount (newest first).
+  List<ParkingSession> paidSessionsForPark(String parkId, {int limit = 5}) {
+    final list = state.history
+        .where(
+          (s) =>
+              s.parkId == parkId &&
+              s.amountHkd != null &&
+              s.endedAt != null,
+        )
+        .toList();
+    if (list.length <= limit) return list;
+    return list.sublist(0, limit);
+  }
+
 }
+

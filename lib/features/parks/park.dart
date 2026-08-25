@@ -12,6 +12,7 @@ class Park {
     this.ugcConfirms = 0,
     this.priceUpdatedAt,
     this.source = 'seed',
+    this.priceNote = '',
   });
 
   final String id;
@@ -26,9 +27,13 @@ class Park {
   final int ugcConfirms;
   final DateTime? priceUpdatedAt;
   final String source;
+  /// Free-text rule, e.g. 「首小時 $30 · 之後每半鐘 $15」
+  final String priceNote;
 
   bool get hasPrice =>
       hourlyHkd != null || dailyHkd != null || nightHkd != null;
+
+  bool get hasPriceNote => priceNote.trim().isNotEmpty;
 
   String get priceSummary {
     if (hourlyHkd != null) return 'HK\$${hourlyHkd!.toStringAsFixed(0)}/時';
@@ -53,6 +58,7 @@ class Park {
     int? ugcConfirms,
     DateTime? priceUpdatedAt,
     String? source,
+    String? priceNote,
   }) {
     return Park(
       id: id,
@@ -67,6 +73,7 @@ class Park {
       ugcConfirms: ugcConfirms ?? this.ugcConfirms,
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
       source: source ?? this.source,
+      priceNote: priceNote ?? this.priceNote,
     );
   }
 }

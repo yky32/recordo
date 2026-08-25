@@ -195,6 +195,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     double? hourly,
     double? daily,
     double? night,
+    String? priceNote,
     bool confirmOnly = false,
   }) async {
     await _repo.reportPrice(
@@ -202,6 +203,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       hourly: hourly,
       daily: daily,
       night: night,
+      priceNote: priceNote,
       confirmOnly: confirmOnly,
     );
     await load();
