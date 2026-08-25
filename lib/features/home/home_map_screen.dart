@@ -63,7 +63,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     });
   }
 
-  ({double top, double bottom}) _readBand() {
+  /// [applyNow] = update band notifiers immediately (call outside build only).
+  ({double top, double bottom}) _readBand({bool applyNow = false}) {
     final h = MediaQuery.sizeOf(context).height;
     var topY = h * 0.14;
     var bottomY = h * (1.0 - _sheetExtent.value);
@@ -101,13 +102,18 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
 
     if ((topY - _bandTopY.value).abs() > 0.5 ||
         (bottomY - _bandBottomY.value).abs() > 0.5) {
-      final t = topY;
-      final b = bottomY;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if ((t - _bandTopY.value).abs() > 0.5) _bandTopY.value = t;
-        if ((b - _bandBottomY.value).abs() > 0.5) _bandBottomY.value = b;
-      });
+      if (applyNow) {
+        _bandTopY.value = topY;
+        _bandBottomY.value = bottomY;
+      } else {
+        final t = topY;
+        final b = bottomY;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if ((t - _bandTopY.value).abs() > 0.5) _bandTopY.value = t;
+          if ((b - _bandBottomY.value).abs() > 0.5) _bandBottomY.value = b;
+        });
+      }
     }
     return (top: topY, bottom: bottomY);
   }
@@ -120,26 +126,35 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   GlobalKey _keyForPark(String id) =>
       _itemKeys.putIfAbsent(id, GlobalKey.new);
 
-  /// Select park + open sheet enough + scroll list so row is visible.
+  /// Select park + list anchor + keep map pin above sheet (not under lip).
   Future<void> _selectAndAnchor(String id, List<Park> parks) async {
     if (!mounted) return;
     final cubit = context.read<ParkCatalogCubit>();
     cubit.select(id);
 
-    // Expand sheet so list + CTA readable
-    if (_sheetCtrl.isAttached && _sheetCtrl.size < 0.58) {
+    // Leave more map than 0.65 — pin was almost covered by sheet
+    const targetSheet = 0.52;
+    if (_sheetCtrl.isAttached && _sheetCtrl.size < targetSheet - 0.02) {
       try {
         await _sheetCtrl.animateTo(
-          0.65.clamp(_sheetMinWithCta, _sheetMax),
+          targetSheet.clamp(_sheetMinWithCta, _sheetMax),
           duration: const Duration(milliseconds: 280),
           curve: Curves.easeOutCubic,
         );
       } catch (_) {}
     }
 
-    // Wait layout after select highlight + sheet size
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     if (!mounted) return;
+
+    // After sheet moves: refresh band + recenter pin into visible map
+    if (_sheetCtrl.isAttached) {
+      _sheetExtent.value = _sheetCtrl.size;
+    }
+    _readBand(applyNow: true);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    if (!mounted) return;
+    _mapKey.currentState?.centerOnSelected();
 
     final ctx = _keyForPark(id).currentContext;
     if (ctx != null) {
@@ -147,7 +162,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
         ctx,
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
-        alignment: 0.15, // near top of sheet viewport
+        alignment: 0.12,
         alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
       );
       return;
@@ -161,7 +176,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
           ctx2,
           duration: const Duration(milliseconds: 280),
           curve: Curves.easeOutCubic,
-          alignment: 0.15,
+          alignment: 0.12,
         );
       }
     });
