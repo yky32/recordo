@@ -117,11 +117,13 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   }
 
   void _measureChrome() {
-      if (!mounted) return;
-      _readBand();
-    }
+    if (!mounted) return;
+    _readBand();
+  }
 
-    Future<void> _endSession(BuildContext context) async {
+
+
+  @override
   void dispose() {
     _sheetCtrl.removeListener(_onSheet);
     _sheetCtrl.dispose();
@@ -339,7 +341,6 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       ],
                       builder: (context, scrollController) {
                         final showCtaBar = active != null || selected != null;
-                        // Approximate sticky footer height for list bottom padding
                         final ctaPad = showCtaBar
                             ? (active == null ? 120.0 : 80.0) + bottomInset
                             : 12.0 + bottomInset;
@@ -352,76 +353,57 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                             top: Radius.circular(28),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          // ONE scroll view + DSS controller = list scrolls + sheet drag.
-                          // Column+Expanded+ListView broke vertical drag competition.
                           child: Stack(
                             children: [
                               CustomScrollView(
                                 controller: scrollController,
                                 physics: const ClampingScrollPhysics(),
                                 slivers: [
+                                  const SliverToBoxAdapter(
+                                    child: SizedBox(height: 10),
+                                  ),
                                   SliverToBoxAdapter(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () => FocusManager
-                                          .instance.primaryFocus
-                                          ?.unfocus(),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
+                                    child: Center(
+                                      child: Container(
+                                        width: 44,
+                                        height: 5,
+                                        margin: const EdgeInsets.only(bottom: 6),
+                                        decoration: BoxDecoration(
+                                          color: UberColors.hairline,
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  SliverToBoxAdapter(
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          20, 0, 20, 8),
+                                      child: Row(
                                         children: [
-                                          Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                                0, 10, 0, 6),
-                                            child: Center(
-                                              child: Container(
-                                                width: 44,
-                                                height: 5,
-                                                decoration: BoxDecoration(
-                                                  color: UberColors.hairline,
-                                                  borderRadius:
-                                                      BorderRadius.circular(99),
-                                                ),
-                                              ),
+                                          Expanded(
+                                            child: Text(
+                                              active == null
+                                                  ? '附近停車場'
+                                                  : '泊緊',
+                                              style: RType.titleSm(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
-                                          Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                                20, 0, 20, 8),
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    active == null
-                                                        ? '附近停車場'
-                                                        : '泊緊',
-                                                    style: RType.titleSm(),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    textHeightBehavior:
-                                                        const TextHeightBehavior(
-                                                      applyHeightToFirstAscent:
-                                                          false,
-                                                      applyHeightToLastDescent:
-                                                          false,
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (active != null)
-                                                  Text(
-                                                    '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
-                                                    style: RType.muted(),
-                                                  )
-                                                else
-                                                  Text(
-                                                    catalog.totalInDb > 0
-                                                        ? '${catalog.parks.length} 附近 · 庫存 ${catalog.totalInDb}'
-                                                        : '${catalog.parks.length} 個',
-                                                    style: RType.muted(),
-                                                  ),
-                                              ],
+                                          if (active != null)
+                                            Text(
+                                              '本月 HK\$${session.monthTotal.toStringAsFixed(0)}',
+                                              style: RType.muted(),
+                                            )
+                                          else
+                                            Text(
+                                              catalog.totalInDb > 0
+                                                  ? '${catalog.parks.length} 附近 · 庫存 ${catalog.totalInDb}'
+                                                  : '${catalog.parks.length} 個',
+                                              style: RType.muted(),
                                             ),
-                                          ),
                                         ],
                                       ),
                                     ),
@@ -436,25 +418,26 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                     sliver: SliverList(
                                       delegate: SliverChildBuilderDelegate(
                                         (context, i) {
-                                          final p = catalog.parks[i];
+                                          final park = catalog.parks[i];
                                           final on =
-                                              p.id == catalog.selectedId;
+                                              park.id == catalog.selectedId;
                                           final dm = context
                                               .read<ParkCatalogCubit>()
-                                              .distanceMeters(p);
+                                              .distanceMeters(park);
                                           return Padding(
                                             padding: const EdgeInsets.only(
                                                 bottom: 8),
                                             child: _ParkTile(
-                                              park: p,
+                                              park: park,
                                               selected: on,
                                               distance: ParkCatalogCubit
                                                   .formatDistance(dm),
                                               onTap: () => context
                                                   .read<ParkCatalogCubit>()
-                                                  .select(p.id),
+                                                  .select(park.id),
                                               onOpenDetail: () => context.push(
-                                                  parkDetailLocation(p.id)),
+                                                parkDetailLocation(park.id),
+                                              ),
                                             ),
                                           );
                                         },
@@ -502,14 +485,16 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                                   thumbColor:
                                                       UberColors.ctaOnFill,
                                                   onCompleted: () async {
-                                                    final p = catalog.selected;
-                                                    if (p == null) return;
-                                                    final hourly = p.hourlyHkd;
+                                                    final park =
+                                                        catalog.selected;
+                                                    if (park == null) return;
+                                                    final hourly =
+                                                        park.hourlyHkd;
                                                     await context
                                                         .read<SessionCubit>()
                                                         .start(
-                                                          parkId: p.id,
-                                                          parkName: p.name,
+                                                          parkId: park.id,
+                                                          parkName: park.name,
                                                           hourlyLabel: hourly !=
                                                                   null
                                                               ? 'HK\$${hourly.toStringAsFixed(0)}'
