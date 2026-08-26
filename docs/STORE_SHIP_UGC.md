@@ -30,9 +30,12 @@ Repo → Settings → Secrets → Actions：
 |------|--------|
 | `SUPABASE_URL` | `https://jutuorafntyvukxzehlg.supabase.co` |
 | `SUPABASE_ANON_KEY` | publishable / anon key |
+| `SUPABASE_ACCESS_TOKEN` | Account → Access Tokens (`sbp_…`) — for Actions `db push` |
+| `SUPABASE_DB_PASSWORD` | Project Settings → Database password |
 
 Deploy workflow + Fastlane 會 `--dart-define` 入 IPA。  
-**無呢兩個 secret = 上架包永遠「本機 only」。**
+**無 URL / ANON_KEY = 上架包永遠「本機 only」。**  
+Schema：Actions → **Supabase** → Run workflow（`supabase db push`）。
 
 ### C. App Store Connect
 - [ ] Privacy：說明收集 UGC 場價（自願提交）、無強制帳戶（而家 anon RLS）
