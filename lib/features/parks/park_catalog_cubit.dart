@@ -97,6 +97,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     await _repo.loadLocalFirst();
     _emitCatalog();
     final result = await _repo.syncIfRemoteNewer();
+    await _repo.flushOutbox();
     if (result == CatalogSyncResult.updated) {
       _emitCatalog();
     }
@@ -234,6 +235,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   Future<CatalogSyncResult> syncFromCloud({bool force = false}) async {
     try {
       final result = await _repo.syncIfRemoteNewer(force: force);
+      await _repo.flushOutbox();
       _emitCatalog();
       return result;
     } catch (_) {
