@@ -7,17 +7,19 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/features/home/map_pins.dart';
+import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/park.dart';
 
 /// Full-screen map. Parent overlays search/sheet.
-/// [centerOn] places target on optical mid of [bandTopY]↔[bandBottomY].
+/// Band notifiers are read only when centering — sheet drag must not rebuild tiles.
 class ParkMap extends StatefulWidget {
   const ParkMap({
     super.key,
     required this.parks,
+    required this.bandTopY,
+    required this.bandBottomY,
     this.selectedId,
-    this.bandTopY = 120,
-    this.bandBottomY = 500,
     this.onSelect,
     this.onUserLocation,
     this.onPinMoved,
@@ -27,8 +29,8 @@ class ParkMap extends StatefulWidget {
 
   final List<Park> parks;
   final String? selectedId;
-  final double bandTopY;
-  final double bandBottomY;
+  final ValueNotifier<double> bandTopY;
+  final ValueNotifier<double> bandBottomY;
   final ValueChanged<String>? onSelect;
   final ValueChanged<LatLng>? onUserLocation;
   final ValueChanged<LatLng>? onPinMoved;
@@ -39,15 +41,18 @@ class ParkMap extends StatefulWidget {
   State<ParkMap> createState() => ParkMapState();
 }
 
-class ParkMapState extends State<ParkMap> {
+class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
   static const hkCenter = LatLng(22.3193, 114.1694);
 
   final _map = MapController();
   StreamSubscription<Position>? _sub;
   LatLng? _me;
+  double _accuracyM = 40;
   bool _locating = false;
   bool _didInitialRecenter = false;
   bool _programmaticMove = false;
+  AnimationController? _camAnim;
+  Timer? _pinDebounce;
 
   @override
   void initState() {
@@ -60,6 +65,8 @@ class ParkMapState extends State<ParkMap> {
 
   @override
   void dispose() {
+    _pinDebounce?.cancel();
+    _camAnim?.dispose();
     _sub?.cancel();
     _map.dispose();
     super.dispose();
@@ -81,47 +88,7 @@ class ParkMapState extends State<ParkMap> {
     if (id == null) return;
     final p = widget.parks.where((e) => e.id == id).firstOrNull;
     if (p == null) return;
-    _centerOn(LatLng(p.lat, p.lng), zoom: 17.2);
-  }
-
-  /// Place [ll] in the upper part of search↔sheet band (not mid —
-  /// mid sits on the sheet lip and "almost blocks" the pin).
-  void _centerOn(LatLng ll, {double? zoom}) {
-    if (!mounted) return;
-    final z = (zoom ?? 15.5).clamp(14.0, 18.0);
-    final h = MediaQuery.sizeOf(context).height;
-
-    var top = widget.bandTopY;
-    var bottom = widget.bandBottomY;
-    if (!top.isFinite || !bottom.isFinite || bottom <= top + 60) {
-      top = h * 0.14;
-      bottom = h * 0.55;
-    }
-    // ~30% down the visible band → clear of sheet top + CTA
-    final targetY = top + (bottom - top) * 0.30;
-    // flutter_map: +offset.y moves point DOWN on screen
-    final offsetY = targetY - h / 2;
-
-    _programmaticMove = true;
-    try {
-      final cam = _map.camera;
-      final newPoint = cam.projectAtZoom(ll, z);
-      final center = cam.unprojectAtZoom(newPoint - Offset(0, offsetY), z);
-      if (!_map.move(center, z)) {
-        _map.move(ll, z, offset: Offset(0, offsetY));
-      }
-    } catch (_) {
-      try {
-        _map.move(ll, z, offset: Offset(0, offsetY));
-      } catch (_) {
-        try {
-          _map.move(ll, z);
-        } catch (_) {}
-      }
-    }
-    Future<void>.delayed(const Duration(milliseconds: 150), () {
-      _programmaticMove = false;
-    });
+    _animateTo(LatLng(p.lat, p.lng), zoom: 17.4);
   }
 
   void centerOnMe({bool animated = true}) {
@@ -130,7 +97,88 @@ class ParkMapState extends State<ParkMap> {
       locate(forceCamera: true);
       return;
     }
-    _centerOn(me, zoom: 15.5);
+    _animateTo(me, zoom: 16.2);
+  }
+
+  Offset _bandOffset(double mapH) {
+    var top = widget.bandTopY.value;
+    var bottom = widget.bandBottomY.value;
+    if (!top.isFinite || !bottom.isFinite || bottom <= top + 60) {
+      top = mapH * 0.14;
+      bottom = mapH * 0.55;
+    }
+    final targetY = top + (bottom - top) * 0.42;
+    return Offset(0, targetY - mapH / 2);
+  }
+
+  LatLng _cameraCenterFor(LatLng ll, double z, Size mapSize) {
+    try {
+      final cam = _map.camera;
+      final offsetY = _bandOffset(mapSize.height).dy;
+      final newPoint = cam.projectAtZoom(ll, z);
+      return cam.unprojectAtZoom(newPoint - Offset(0, offsetY), z);
+    } catch (_) {
+      return ll;
+    }
+  }
+
+  void _animateTo(LatLng ll, {double? zoom}) {
+    if (!mounted) return;
+    final z = (zoom ?? 16.0).clamp(13.5, 18.0);
+    final h = MediaQuery.sizeOf(context).height;
+    final w = MediaQuery.sizeOf(context).width;
+    LatLng dest;
+    double fromZ;
+    LatLng from;
+    try {
+      from = _map.camera.center;
+      fromZ = _map.camera.zoom;
+      dest = _cameraCenterFor(ll, z, Size(w, h));
+    } catch (_) {
+      _moveNow(ll, z);
+      return;
+    }
+
+    _camAnim?.stop();
+    _camAnim?.dispose();
+    final ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _camAnim = ctrl;
+    final curve = CurvedAnimation(parent: ctrl, curve: Curves.easeInOutCubic);
+    _programmaticMove = true;
+    ctrl.addListener(() {
+      if (!mounted) return;
+      final t = curve.value;
+      final lat = from.latitude + (dest.latitude - from.latitude) * t;
+      final lng = from.longitude + (dest.longitude - from.longitude) * t;
+      final zz = fromZ + (z - fromZ) * t;
+      try {
+        _map.move(LatLng(lat, lng), zz);
+      } catch (_) {}
+    });
+    ctrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed || s == AnimationStatus.dismissed) {
+        _programmaticMove = false;
+      }
+    });
+    ctrl.forward();
+  }
+
+  void _moveNow(LatLng ll, double z) {
+    _programmaticMove = true;
+    try {
+      final h = MediaQuery.sizeOf(context).height;
+      _map.move(ll, z, offset: _bandOffset(h));
+    } catch (_) {
+      try {
+        _map.move(ll, z);
+      } catch (_) {}
+    }
+    Future<void>.delayed(const Duration(milliseconds: 160), () {
+      _programmaticMove = false;
+    });
   }
 
   Future<void> locate({bool forceCamera = false}) async {
@@ -226,12 +274,15 @@ class ParkMapState extends State<ParkMap> {
   void _applyPosition(Position pos, {required bool moveCamera}) {
     final ll = LatLng(pos.latitude, pos.longitude);
     if (!mounted) return;
-    setState(() => _me = ll);
+    setState(() {
+      _me = ll;
+      _accuracyM = pos.accuracy.clamp(18, 80);
+    });
     widget.onUserLocation?.call(ll);
     if (moveCamera) {
       _didInitialRecenter = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _centerOn(ll, zoom: 15.5);
+        if (mounted) _animateTo(ll, zoom: 16.2);
       });
     }
   }
@@ -244,33 +295,122 @@ class ParkMapState extends State<ParkMap> {
       widget.onMapInteraction?.call();
     }
     if (_programmaticMove) return;
-    if (e is MapEventMoveEnd) {
-      widget.onPinMoved?.call(_map.camera.center);
+    if (e is MapEventMoveEnd || e is MapEventFlingAnimationEnd) {
+      if (mounted) setState(() {});
+      final center = _map.camera.center;
+      _pinDebounce?.cancel();
+      _pinDebounce = Timer(const Duration(milliseconds: 380), () {
+        if (!mounted) return;
+        widget.onPinMoved?.call(center);
+      });
+    }
+  }
+
+  List<ParkCluster> _clusters() {
+    try {
+      final cam = _map.camera;
+      if (cam.nonRotatedSize.width <= 0) {
+        return [
+          for (final p in widget.parks)
+            ParkCluster(parks: [p], center: LatLng(p.lat, p.lng)),
+        ];
+      }
+      final bounds = cam.visibleBounds;
+      final visible = <Park>[];
+      for (final p in widget.parks) {
+        if (p.id == widget.selectedId ||
+            bounds.contains(LatLng(p.lat, p.lng))) {
+          visible.add(p);
+        }
+      }
+      return clusterParks(
+        parks: visible,
+        toScreen: cam.latLngToScreenOffset,
+        radiusPx: clusterRadiusPx(cam.zoom),
+        keepSeparateId: widget.selectedId,
+      );
+    } catch (_) {
+      return [
+        for (final p in widget.parks.take(40))
+          ParkCluster(parks: [p], center: LatLng(p.lat, p.lng)),
+      ];
+    }
+  }
+
+  void _onClusterTap(ParkCluster c) {
+    if (c.isSingle) {
+      widget.onSelect?.call(c.primary.id);
+      return;
+    }
+    // OSM duplicates stacked on one lot — pick a park instead of fighting zoom.
+    if (clusterSpanM(c) < 28) {
+      final pick = c.parks.firstWhere((p) => p.hasPrice, orElse: () => c.primary);
+      widget.onSelect?.call(pick.id);
+      return;
+    }
+    try {
+      final pts = c.parks.map((p) => LatLng(p.lat, p.lng)).toList();
+      _programmaticMove = true;
+      _map.fitCamera(
+        CameraFit.coordinates(
+          coordinates: pts,
+          padding: const EdgeInsets.fromLTRB(48, 120, 48, 220),
+          maxZoom: 17.8,
+        ),
+      );
+      Future<void>.delayed(const Duration(milliseconds: 280), () {
+        _programmaticMove = false;
+        if (mounted) setState(() {});
+      });
+    } catch (_) {
+      widget.onSelect?.call(c.primary.id);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final markers = <Marker>[
-      for (final p in widget.parks)
-        Marker(
-          point: LatLng(p.lat, p.lng),
-          width: p.id == widget.selectedId ? 52 : 36,
-          height: p.id == widget.selectedId ? 52 : 36,
-          alignment: Alignment.center,
-          child: GestureDetector(
-            onTap: () => widget.onSelect?.call(p.id),
-            child: _ParkPin(selected: p.id == widget.selectedId),
+    final clusters = _clusters();
+    final clusterMarkers = <Marker>[];
+    final pinMarkers = <Marker>[];
+    Marker? selectedMarker;
+
+    for (final c in clusters) {
+      if (!c.isSingle) {
+        clusterMarkers.add(
+          Marker(
+            point: c.center,
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            child: ParkClusterChip(
+              count: c.parks.length,
+              onTap: () => _onClusterTap(c),
+            ),
           ),
-        ),
-      if (_me != null)
-        Marker(
-          point: _me!,
-          width: 22,
-          height: 22,
-          child: const _MeDot(),
-        ),
-    ];
+        );
+        continue;
+      }
+      final p = c.primary;
+      final selected = p.id == widget.selectedId;
+      final marker = Marker(
+        point: LatLng(p.lat, p.lng),
+        width: selected ? 160 : (p.hasPrice ? 72 : 28),
+        height: selected ? 78 : (p.hasPrice ? 36 : 28),
+        alignment: p.hasPrice || selected ? Alignment.bottomCenter : Alignment.center,
+        child: selected || p.hasPrice
+            ? ParkPriceChip(
+                park: p,
+                selected: selected,
+                onTap: () => widget.onSelect?.call(p.id),
+              )
+            : ParkDot(onTap: () => widget.onSelect?.call(p.id)),
+      );
+      if (selected) {
+        selectedMarker = marker;
+      } else {
+        pinMarkers.add(marker);
+      }
+    }
 
     return ListenableBuilder(
       listenable: ThemeController.instance,
@@ -280,8 +420,8 @@ class ParkMapState extends State<ParkMap> {
           mapController: _map,
           options: MapOptions(
             initialCenter: _me ?? hkCenter,
-            initialZoom: 14.5,
-            minZoom: 10,
+            initialZoom: 15.8,
+            minZoom: 11,
             maxZoom: 18,
             backgroundColor: UberColors.mapBlock,
             onMapEvent: _onMapEvent,
@@ -293,7 +433,6 @@ class ParkMapState extends State<ParkMap> {
           children: [
             TileLayer(
               key: ValueKey(tileUrl),
-              // No {r} — retina @2x broke some CDN paths on device
               urlTemplate: tileUrl,
               fallbackUrl: UberColors.mapTileFallback,
               subdomains: const ['a', 'b', 'c', 'd'],
@@ -306,82 +445,37 @@ class ParkMapState extends State<ParkMap> {
                 }
               },
             ),
-            MarkerLayer(markers: markers),
+            if (_me != null)
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: _me!,
+                    radius: _accuracyM,
+                    useRadiusInMeter: true,
+                    color: googleBlue.withValues(alpha: 0.12),
+                    borderStrokeWidth: 1,
+                    borderColor: googleBlue.withValues(alpha: 0.22),
+                  ),
+                ],
+              ),
+            MarkerLayer(markers: pinMarkers),
+            MarkerLayer(markers: clusterMarkers),
+            if (selectedMarker != null) MarkerLayer(markers: [selectedMarker]),
+            if (_me != null)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _me!,
+                    width: 56,
+                    height: 56,
+                    alignment: Alignment.center,
+                    child: const MeLocationDot(),
+                  ),
+                ],
+              ),
           ],
         );
       },
-    );
-  }
-}
-
-class _MeDot extends StatelessWidget {
-  const _MeDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF2F80ED),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2F80ED).withValues(alpha: 0.45),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParkPin extends StatelessWidget {
-  const _ParkPin({required this.selected});
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = selected ? 46.0 : 32.0;
-    final dark = ThemeController.instance.isDark;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      width: s,
-      height: s,
-      decoration: BoxDecoration(
-        color: selected
-            ? UberColors.accent
-            : (dark ? UberColors.elevated2 : Colors.white),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: selected
-              ? UberColors.onAccent
-              : (dark
-                  ? Colors.white.withValues(alpha: 0.35)
-                  : const Color(0xFF111111).withValues(alpha: 0.2)),
-          width: selected ? 3 : 1.5,
-        ),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: UberColors.accent.withValues(alpha: 0.45),
-                  blurRadius: 14,
-                  spreadRadius: 1,
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: dark ? 0.35 : 0.12),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Icon(
-        Icons.local_parking_rounded,
-        size: selected ? 24 : 16,
-        color: selected ? UberColors.onAccent : UberColors.white,
-      ),
     );
   }
 }

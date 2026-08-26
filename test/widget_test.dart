@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
@@ -89,5 +91,63 @@ void main() {
     expect(snap, isNotNull);
     expect(snap!.version, 7);
     expect(snap.parks.single.id, 'a');
+  });
+
+  test('unpriced lots cluster; priced chips stay separate', () {
+    Offset toScreen(LatLng ll) =>
+        Offset(ll.longitude * 8000, ll.latitude * 8000);
+    const priced = Park(
+      id: 'p',
+      name: '有價',
+      district: '灣仔',
+      lat: 22.278,
+      lng: 114.174,
+      hourlyHkd: 28,
+    );
+    const a = Park(
+      id: 'a',
+      name: '地庫停車場',
+      district: '灣仔',
+      lat: 22.27805,
+      lng: 114.1741,
+    );
+    const b = Park(
+      id: 'b',
+      name: '地庫停車場',
+      district: '灣仔',
+      lat: 22.27808,
+      lng: 114.17412,
+    );
+    const far = Park(
+      id: 'c',
+      name: '遠',
+      district: '北角',
+      lat: 22.29,
+      lng: 114.20,
+    );
+    final clusters = clusterParks(
+      parks: const [priced, a, b, far],
+      toScreen: toScreen,
+      radiusPx: 40,
+    );
+    expect(clusters.any((c) => c.isSingle && c.primary.id == 'p'), isTrue);
+    expect(clusters.any((c) => c.primary.id == 'a' || c.primary.id == 'b'), isFalse);
+    expect(clusters.any((c) => c.parks.any((p) => p.id == 'c')), isTrue);
+  });
+
+  test('pin price label is compact', () {
+    expect(
+      pinPriceLabel(
+        const Park(
+          id: 'x',
+          name: 'x',
+          district: 'x',
+          lat: 0,
+          lng: 0,
+          hourlyHkd: 28,
+        ),
+      ),
+      '\$28',
+    );
   });
 }

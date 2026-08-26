@@ -22,19 +22,20 @@ class HomeMapScreen extends StatefulWidget {
   State<HomeMapScreen> createState() => _HomeMapScreenState();
 }
 
-class _HomeMapScreenState extends State<HomeMapScreen> {
+class _HomeMapScreenState extends State<HomeMapScreen>
+    with SingleTickerProviderStateMixin {
   final _mapKey = GlobalKey<ParkMapState>();
   final _searchKey = GlobalKey();
   final _sheetKey = GlobalKey();
-  final _sheetCtrl = DraggableScrollableController();
   /// Keys so map pin select can [Scrollable.ensureVisible] the list row.
   final _itemKeys = <String, GlobalKey>{};
 
-  /// Avoid setState during sheet drag — full rebuild kills list scroll.
+  /// Sheet height as a fraction of screen. Only the handle drags this.
   final _sheetExtent = ValueNotifier<double>(_sheetInit);
   final _bandTopY = ValueNotifier<double>(120);
   final _bandBottomY = ValueNotifier<double>(500);
   bool _locating = false;
+  AnimationController? _sheetAnim;
 
   static const _sheetMin = 0.28;
   static const _sheetMinWithCta = 0.38;
@@ -44,23 +45,53 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
   @override
   void initState() {
     super.initState();
-    _sheetCtrl.addListener(_onSheet);
     WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
   }
 
-  void _onSheet() {
-    if (!_sheetCtrl.isAttached) return;
-    final s = _sheetCtrl.size;
-    if ((s - _sheetExtent.value).abs() <= 0.008) return;
-    // Never notify during build (DSS fires while tree builds).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_sheetCtrl.isAttached) return;
-      final v = _sheetCtrl.size;
-      if ((v - _sheetExtent.value).abs() > 0.008) {
-        _sheetExtent.value = v;
-      }
+  void _setSheetExtent(double value, double min) {
+    final next = value.clamp(min, _sheetMax);
+    if ((next - _sheetExtent.value).abs() < 0.0008) return;
+    _sheetExtent.value = next;
+  }
+
+  void _onHandleDragUpdate(DragUpdateDetails d, double min) {
+    _sheetAnim?.stop();
+    final h = MediaQuery.sizeOf(context).height;
+    _setSheetExtent(_sheetExtent.value - d.delta.dy / h, min);
+  }
+
+  void _onHandleDragEnd(DragEndDetails d, double min) {
+    final v = d.velocity.pixelsPerSecond.dy;
+    if (v.abs() < 450) {
       _measureChrome();
+      return;
+    }
+    final target = v < 0 ? _sheetMax : min;
+    _animateSheetTo(target, min);
+  }
+
+  Future<void> _animateSheetTo(double target, double min) async {
+    final to = target.clamp(min, _sheetMax);
+    final from = _sheetExtent.value;
+    if ((to - from).abs() < 0.01) return;
+    _sheetAnim?.stop();
+    _sheetAnim?.dispose();
+    final ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
+    _sheetAnim = ctrl;
+    final anim = Tween<double>(begin: from, end: to).animate(
+      CurvedAnimation(parent: ctrl, curve: Curves.easeOutCubic),
+    );
+    anim.addListener(() {
+      if (!mounted) return;
+      _sheetExtent.value = anim.value;
     });
+    try {
+      await ctrl.forward();
+    } catch (_) {}
+    if (mounted) _measureChrome();
   }
 
   /// [applyNow] = update band notifiers immediately (call outside build only).
@@ -79,8 +110,8 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     final sheetBox = _sheetKey.currentContext?.findRenderObject() as RenderBox?;
     if (sheetBox != null && sheetBox.hasSize) {
       bottomY = sheetBox.localToGlobal(Offset.zero).dy;
-    } else if (_sheetCtrl.isAttached) {
-      bottomY = h * (1.0 - _sheetCtrl.size);
+    } else {
+      bottomY = h * (1.0 - _sheetExtent.value);
     }
 
     if (!topY.isFinite || topY < 0) topY = h * 0.14;
@@ -88,9 +119,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     if (topY > h) topY = h * 0.14;
     if (bottomY > h) bottomY = h;
     if (bottomY < topY + 100) {
-      if (_sheetCtrl.isAttached) {
-        bottomY = h * (1.0 - _sheetCtrl.size);
-      }
+      bottomY = h * (1.0 - _sheetExtent.value);
       if (bottomY < topY + 100) {
         bottomY = (topY + (h - topY) * 0.45).clamp(0.0, h);
       }
@@ -132,25 +161,17 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
     final cubit = context.read<ParkCatalogCubit>();
     cubit.select(id);
 
-    // Leave more map than 0.65 — pin was almost covered by sheet
     const targetSheet = 0.52;
-    if (_sheetCtrl.isAttached && _sheetCtrl.size < targetSheet - 0.02) {
-      try {
-        await _sheetCtrl.animateTo(
-          targetSheet.clamp(_sheetMinWithCta, _sheetMax),
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-        );
-      } catch (_) {}
+    if (_sheetExtent.value < targetSheet - 0.02) {
+      await _animateSheetTo(
+        targetSheet.clamp(_sheetMinWithCta, _sheetMax),
+        _sheetMinWithCta,
+      );
     }
 
     await Future<void>.delayed(const Duration(milliseconds: 80));
     if (!mounted) return;
 
-    // After sheet moves: refresh band + recenter pin into visible map
-    if (_sheetCtrl.isAttached) {
-      _sheetExtent.value = _sheetCtrl.size;
-    }
     _readBand(applyNow: true);
     await Future<void>.delayed(const Duration(milliseconds: 40));
     if (!mounted) return;
@@ -184,8 +205,7 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
 
   @override
   void dispose() {
-    _sheetCtrl.removeListener(_onSheet);
-    _sheetCtrl.dispose();
+    _sheetAnim?.dispose();
     _sheetExtent.dispose();
     _bandTopY.dispose();
     _bandBottomY.dispose();
@@ -215,13 +235,11 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               final showCta = active != null || selected != null;
               final sheetMin = showCta ? _sheetMinWithCta : _sheetMin;
 
-              if (showCta &&
-                  _sheetCtrl.isAttached &&
-                  _sheetCtrl.size + 0.001 < sheetMin) {
+              if (showCta && _sheetExtent.value + 0.001 < sheetMin) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted || !_sheetCtrl.isAttached) return;
-                  if (_sheetCtrl.size < sheetMin) {
-                    _sheetCtrl.jumpTo(sheetMin);
+                  if (!mounted) return;
+                  if (_sheetExtent.value < sheetMin) {
+                    _sheetExtent.value = sheetMin;
                   }
                 });
               }
@@ -233,36 +251,31 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  ListenableBuilder(
-                    listenable: Listenable.merge([_bandTopY, _bandBottomY]),
-                    builder: (context, _) {
-                      return ParkMap(
-                        key: _mapKey,
-                        parks: catalog.parks,
-                        selectedId: catalog.selectedId,
-                        bandTopY: _bandTopY.value,
-                        bandBottomY: _bandBottomY.value,
-                        onSelect: (id) {
-                          hideKeyboard();
-                          _selectAndAnchor(id, catalog.parks);
-                        },
-                        onMapInteraction: hideKeyboard,
-                        onUserLocation: (ll) => context
-                            .read<ParkCatalogCubit>()
-                            .setUserLocation(ll.latitude, ll.longitude),
-                        onPinMoved: (ll) => context
-                            .read<ParkCatalogCubit>()
-                            .setPin(ll.latitude, ll.longitude),
-                        onLocateState: (locating, err) {
-                          if (!mounted) return;
-                          setState(() => _locating = locating);
-                          if (err != null && err.isNotEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(err)),
-                            );
-                          }
-                        },
-                      );
+                  ParkMap(
+                    key: _mapKey,
+                    parks: catalog.parks,
+                    selectedId: catalog.selectedId,
+                    bandTopY: _bandTopY,
+                    bandBottomY: _bandBottomY,
+                    onSelect: (id) {
+                      hideKeyboard();
+                      _selectAndAnchor(id, catalog.parks);
+                    },
+                    onMapInteraction: hideKeyboard,
+                    onUserLocation: (ll) => context
+                        .read<ParkCatalogCubit>()
+                        .setUserLocation(ll.latitude, ll.longitude),
+                    onPinMoved: (ll) => context
+                        .read<ParkCatalogCubit>()
+                        .setPin(ll.latitude, ll.longitude),
+                    onLocateState: (locating, err) {
+                      if (!mounted) return;
+                      setState(() => _locating = locating);
+                      if (err != null && err.isNotEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(err)),
+                        );
+                      }
                     },
                   ),
                   SafeArea(
@@ -344,9 +357,12 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                         right: 16,
                         bottom: screenH * extent + 12,
                         child: Material(
-                          color: UberColors.sheet.withValues(alpha: 0.95),
+                          color: ThemeController.instance.isDark
+                              ? const Color(0xFF1C1C1E)
+                              : Colors.white,
                           shape: const CircleBorder(),
-                          elevation: 4,
+                          elevation: 6,
+                          shadowColor: Colors.black54,
                           child: InkWell(
                             customBorder: const CircleBorder(),
                             onTap: _locating
@@ -369,9 +385,9 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : Icon(
+                                  : const Icon(
                                       Icons.my_location_rounded,
-                                      color: UberColors.white,
+                                      color: Color(0xFF4285F4),
                                     ),
                             ),
                           ),
@@ -379,230 +395,244 @@ class _HomeMapScreenState extends State<HomeMapScreen> {
                       );
                     },
                   ),
-                  NotificationListener<DraggableScrollableNotification>(
-                    onNotification: (n) {
-                      // Defer — DSS notifies during build; never markNeedsBuild mid-build.
-                      final extent = n.extent;
-                      if ((extent - _sheetExtent.value).abs() > 0.005) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          if ((extent - _sheetExtent.value).abs() > 0.005) {
-                            _sheetExtent.value = extent;
-                          }
-                          _measureChrome();
-                        });
-                      }
-                      return false;
-                    },
-                    child: DraggableScrollableSheet(
-                      controller: _sheetCtrl,
-                      initialChildSize: _sheetInit,
-                      minChildSize: sheetMin,
-                      maxChildSize: _sheetMax,
-                      snap: false, // drag free — stop at release height
-                      builder: (context, scrollController) {
-                        final showCtaBar =
-                            active != null || selected != null;
-                        final ctaPad = showCtaBar
-                            ? (active == null ? 120.0 : 80.0) + bottomInset
-                            : 12.0 + bottomInset;
-
-                        return Material(
-                          key: _sheetKey,
-                          color: UberColors.sheet,
-                          elevation: 12,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(28),
+                  ListenableBuilder(
+                    listenable: _sheetExtent,
+                    child: Material(
+                      key: _sheetKey,
+                      color: UberColors.sheet,
+                      elevation: 12,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          _SheetDragHandle(
+                            title: active == null ? '附近停車場' : '泊緊',
+                            trailing: active != null
+                                ? '本月 HK\$${session.monthTotal.toStringAsFixed(0)}'
+                                : '${catalog.parks.length} 個附近',
+                            onUpdate: (d) =>
+                                _onHandleDragUpdate(d, sheetMin),
+                            onEnd: (d) => _onHandleDragEnd(d, sheetMin),
                           ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            children: [
-                              const SizedBox(height: 10),
-                              Center(
-                                child: Container(
-                                  width: 44,
-                                  height: 5,
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  decoration: BoxDecoration(
-                                    color: UberColors.hairline,
-                                    borderRadius: BorderRadius.circular(99),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                ListView.builder(
+                                  primary: false,
+                                  padding: EdgeInsets.fromLTRB(
+                                    16,
+                                    0,
+                                    16,
+                                    (active != null || selected != null)
+                                        ? (active == null
+                                                ? 120.0
+                                                : 80.0) +
+                                            bottomInset
+                                        : 12.0 + bottomInset,
                                   ),
-                                ),
-                              ),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        active == null ? '附近停車場' : '泊緊',
-                                        style: RType.titleSm(),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    Text(
-                                      active != null
-                                          ? '本月 HK\$${session.monthTotal.toStringAsFixed(0)}'
-                                          : catalog.totalInDb > 0
-                                              ? '${catalog.parks.length} 附近 · 庫存 ${catalog.totalInDb}'
-                                              : '${catalog.parks.length} 個',
-                                      style: RType.muted(),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: Stack(
-                                  children: [
-                                    ListView.builder(
-                                      controller: scrollController,
-                                      primary: false,
-                                      padding: EdgeInsets.fromLTRB(
-                                        16,
-                                        0,
-                                        16,
-                                        ctaPad,
-                                      ),
-                                      physics:
-                                          const AlwaysScrollableScrollPhysics(
-                                        parent: BouncingScrollPhysics(),
-                                      ),
-                                      itemCount: catalog.parks.length,
-                                      itemBuilder: (context, i) {
-                                        final park = catalog.parks[i];
-                                        final on =
-                                            park.id == catalog.selectedId;
-                                        final dm = context
-                                            .read<ParkCatalogCubit>()
-                                            .distanceMeters(park);
-                                        return Padding(
-                                          key: _keyForPark(park.id),
-                                          padding: const EdgeInsets.only(
-                                              bottom: 8),
-                                          child: _ParkTile(
-                                            park: park,
-                                            selected: on,
-                                            distance: ParkCatalogCubit
-                                                .formatDistance(dm),
-                                            onTap: () => _selectAndAnchor(
-                                              park.id,
-                                              catalog.parks,
-                                            ),
-                                            onOpenDetail: () => context.push(
-                                              parkDetailLocation(park.id),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    if (showCtaBar)
-                                      Positioned(
-                                        left: 0,
-                                        right: 0,
-                                        bottom: 0,
-                                        child: Material(
-                                          color: UberColors.sheet,
-                                          elevation: 8,
-                                          shadowColor: Colors.black54,
-                                          child: Padding(
-                                            padding: EdgeInsets.fromLTRB(
-                                              16,
-                                              8,
-                                              16,
-                                              8 + bottomInset,
-                                            ),
-                                            child: active == null
-                                                ? Column(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .stretch,
-                                                    children: [
-                                                      Text(
-                                                        selected!.name,
-                                                        style: RType.body(),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                      ),
-                                                      const SizedBox(height: 6),
-                                                      SlideToUnlock(
-                                                        label: '右滑開始計時',
-                                                        height: 56,
-                                                        accent:
-                                                            UberColors.ctaFill,
-                                                        thumbColor: UberColors
-                                                            .ctaOnFill,
-                                                        onCompleted: () async {
-                                                          final park = catalog
-                                                              .selected;
-                                                          if (park == null) {
-                                                            return;
-                                                          }
-                                                          final hourly =
-                                                              park.hourlyHkd;
-                                                          await context
-                                                              .read<
-                                                                  SessionCubit>()
-                                                              .start(
-                                                                parkId: park.id,
-                                                                parkName:
-                                                                    park.name,
-                                                                hourlyLabel:
-                                                                    hourly !=
-                                                                            null
-                                                                        ? 'HK\$${hourly.toStringAsFixed(0)}'
-                                                                        : null,
-                                                              );
-                                                          HapticFeedback
-                                                              .heavyImpact();
-                                                          if (context.mounted) {
-                                                            context.push(
-                                                                '/session');
-                                                          }
-                                                        },
-                                                      ),
-                                                    ],
-                                                  )
-                                                : SlideToUnlock(
-                                                    label: '右滑結束 · 填收費',
-                                                    height: 56,
-                                                    accent: UberColors.accent,
-                                                    thumbColor:
-                                                        UberColors.ctaOnFill,
-                                                    trackColor:
-                                                        ThemeController
-                                                                .instance
-                                                                .isDark
-                                                            ? const Color(
-                                                                0xFF0A2A1A)
-                                                            : const Color(
-                                                                0xFFD4F5E4),
-                                                    onCompleted: () =>
-                                                        _endSession(context),
-                                                  ),
-                                          ),
+                                  physics: const AlwaysScrollableScrollPhysics(
+                                    parent: BouncingScrollPhysics(),
+                                  ),
+                                  itemCount: catalog.parks.length,
+                                  itemBuilder: (context, i) {
+                                    final park = catalog.parks[i];
+                                    final on =
+                                        park.id == catalog.selectedId;
+                                    final dm = context
+                                        .read<ParkCatalogCubit>()
+                                        .distanceMeters(park);
+                                    return Padding(
+                                      key: _keyForPark(park.id),
+                                      padding: const EdgeInsets.only(
+                                          bottom: 8),
+                                      child: _ParkTile(
+                                        park: park,
+                                        selected: on,
+                                        distance: ParkCatalogCubit
+                                            .formatDistance(dm),
+                                        onTap: () => _selectAndAnchor(
+                                          park.id,
+                                          catalog.parks,
+                                        ),
+                                        onOpenDetail: () => context.push(
+                                          parkDetailLocation(park.id),
                                         ),
                                       ),
-                                  ],
+                                    );
+                                  },
                                 ),
-                              ),
-                            ],
+                                if (active != null || selected != null)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Material(
+                                      color: UberColors.sheet,
+                                      elevation: 8,
+                                      shadowColor: Colors.black54,
+                                      child: Padding(
+                                        padding: EdgeInsets.fromLTRB(
+                                          16,
+                                          8,
+                                          16,
+                                          8 + bottomInset,
+                                        ),
+                                        child: active == null
+                                            ? Column(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment
+                                                        .stretch,
+                                                children: [
+                                                  Text(
+                                                    selected!.name,
+                                                    style: RType.body(),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow
+                                                        .ellipsis,
+                                                    textAlign:
+                                                        TextAlign.center,
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  SlideToUnlock(
+                                                    label: '右滑開始計時',
+                                                    height: 56,
+                                                    accent:
+                                                        UberColors.ctaFill,
+                                                    thumbColor: UberColors
+                                                        .ctaOnFill,
+                                                    onCompleted: () async {
+                                                      final park = catalog
+                                                          .selected;
+                                                      if (park == null) {
+                                                        return;
+                                                      }
+                                                      final hourly =
+                                                          park.hourlyHkd;
+                                                      await context
+                                                          .read<
+                                                              SessionCubit>()
+                                                          .start(
+                                                            parkId: park.id,
+                                                            parkName:
+                                                                park.name,
+                                                            hourlyLabel:
+                                                                hourly !=
+                                                                        null
+                                                                    ? 'HK\$${hourly.toStringAsFixed(0)}'
+                                                                    : null,
+                                                          );
+                                                      HapticFeedback
+                                                          .heavyImpact();
+                                                      if (context.mounted) {
+                                                        context.push(
+                                                            '/session');
+                                                      }
+                                                    },
+                                                  ),
+                                                ],
+                                              )
+                                            : SlideToUnlock(
+                                                label: '右滑結束 · 填收費',
+                                                height: 56,
+                                                accent: UberColors.accent,
+                                                thumbColor:
+                                                    UberColors.ctaOnFill,
+                                                trackColor:
+                                                    ThemeController
+                                                                .instance
+                                                                .isDark
+                                                        ? const Color(
+                                                            0xFF0A2A1A)
+                                                        : const Color(
+                                                            0xFFD4F5E4),
+                                                onCompleted: () =>
+                                                    _endSession(context),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
+                    builder: (context, child) {
+                      return Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          height: screenH * _sheetExtent.value,
+                          width: double.infinity,
+                          child: child,
+                        ),
+                      );
+                    },
                   ),
                 ],
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+/// Handle + title row. This is the only surface that resizes the sheet.
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle({
+    required this.title,
+    required this.trailing,
+    required this.onUpdate,
+    required this.onEnd,
+  });
+
+  final String title;
+  final String trailing;
+  final GestureDragUpdateCallback onUpdate;
+  final GestureDragEndCallback onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: onUpdate,
+      onVerticalDragEnd: onEnd,
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          Center(
+            child: Container(
+              width: 44,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                color: UberColors.hairline,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: RType.titleSm(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(trailing, style: RType.muted()),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
