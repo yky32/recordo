@@ -86,8 +86,14 @@ def pick_name(tags: dict) -> str:
     ptype = tags.get("parking") or ""
     if op:
         return f"{op} 停車場"
-    if ptype in ("multi-storey", "underground", "rooftop"):
-        return f"停車場 ({ptype})"
+    if ptype == "underground":
+        return "地庫停車場"
+    if ptype in ("multi-storey", "multistorey"):
+        return "多層停車場"
+    if ptype == "rooftop":
+        return "天台停車場"
+    if ptype == "surface":
+        return "露天停車場"
     return "停車場"
 
 

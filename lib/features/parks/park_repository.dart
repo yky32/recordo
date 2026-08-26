@@ -53,7 +53,7 @@ class ParkRepository {
         final m = Map<String, dynamic>.from(e as Map);
         return Park(
           id: m['id'] as String? ?? 'osm-unknown',
-          name: m['name'] as String? ?? '停車場',
+          name: prettyParkName(m['name'] as String? ?? '停車場'),
           district: m['district'] as String? ?? '香港',
           lat: (m['lat'] as num).toDouble(),
           lng: (m['lng'] as num).toDouble(),

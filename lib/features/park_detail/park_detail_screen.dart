@@ -487,7 +487,7 @@ class _PaidHistoryCard extends StatelessWidget {
               const SizedBox(height: 6),
               if (paid.isEmpty)
                 Text(
-                  '完結計時並填收費後，會出現喺呢度 · 幫你知真實落閘幾錢',
+                  '未有實付 · 泊完填收費就會出現',
                   style: RType.muted(),
                 )
               else ...[

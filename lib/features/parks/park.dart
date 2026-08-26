@@ -1,3 +1,34 @@
+/// OSM often names unnamed lots `停車場 (underground)` — last letter clips in
+/// the list, and English type tags read poorly. Map to short HK copy.
+String prettyParkName(String raw) {
+  final s = raw.trim();
+  final m = RegExp(
+    r'^(.*?)(?:\s*[\(（]\s*(underground|multi-storey|multistorey|multi_storey|rooftop|surface)\s*[\)）])\s*$',
+    caseSensitive: false,
+  ).firstMatch(s);
+  if (m == null) return s;
+  const kinds = {
+    'underground': '地庫',
+    'multi-storey': '多層',
+    'multistorey': '多層',
+    'multi_storey': '多層',
+    'rooftop': '天台',
+    'surface': '露天',
+  };
+  final kind = kinds[m.group(2)!.toLowerCase()]!;
+  final base = m.group(1)!.trim();
+  if (base.isEmpty ||
+      base == '停車場' ||
+      base.toLowerCase() == 'parking' ||
+      base.toLowerCase() == 'car park') {
+    return '$kind停車場';
+  }
+  if (base.endsWith('停車場') || base.endsWith('停车场')) {
+    return '$base（$kind）';
+  }
+  return '$base（$kind）';
+}
+
 class Park {
   const Park({
     required this.id,
