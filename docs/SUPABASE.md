@@ -2,6 +2,8 @@
 
 目標：**全港場庫喺 cloud**。App 開一次就 dump 落本機玩；之後只喺 `catalog_meta.version` 新過本機先再 dump。
 
+離線 + outbox 細節：**[SYNC.md](./SYNC.md)**。
+
 ---
 
 ## 架構（記低）

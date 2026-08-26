@@ -178,7 +178,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     _mapKey.currentState?.centerOnSelected();
 
     final ctx = _keyForPark(id).currentContext;
-    if (ctx != null) {
+    if (ctx != null && ctx.mounted) {
       await Scrollable.ensureVisible(
         ctx,
         duration: const Duration(milliseconds: 280),
@@ -192,7 +192,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final ctx2 = _keyForPark(id).currentContext;
-      if (ctx2 != null) {
+      if (ctx2 != null && ctx2.mounted) {
         await Scrollable.ensureVisible(
           ctx2,
           duration: const Duration(milliseconds: 280),

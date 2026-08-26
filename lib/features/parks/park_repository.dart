@@ -8,6 +8,7 @@ import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
+import 'package:recordo/features/parks/sync_outbox.dart';
 
 export 'package:recordo/features/parks/catalog_cache.dart' show CatalogSyncResult;
 
@@ -17,11 +18,14 @@ class ParkRepository {
   ParkRepository({
     SupabaseParkRemote? remote,
     CatalogCache? cache,
+    SyncOutbox? outbox,
   })  : _remote = remote ?? SupabaseParkRemote(),
-        _cache = cache ?? CatalogCache();
+        _cache = cache ?? CatalogCache(),
+        _outbox = outbox ?? SyncOutbox();
 
   final SupabaseParkRemote _remote;
   final CatalogCache _cache;
+  final SyncOutbox _outbox;
 
   List<Park>? _catalog;
   int _catalogVersion = 0;
@@ -64,10 +68,14 @@ class ParkRepository {
             remoteVersion: remoteVer,
             localCount: localCount,
           );
-      if (!need) return CatalogSyncResult.unchanged;
+      if (!need) {
+        await _outbox.flush(_remote);
+        return CatalogSyncResult.unchanged;
+      }
 
       final dump = await _remote.fetchCatalogDump();
       if (dump == null || dump.parks.isEmpty) {
+        await _outbox.flush(_remote);
         return localCount > 0
             ? CatalogSyncResult.unchanged
             : CatalogSyncResult.offline;
@@ -83,6 +91,7 @@ class ParkRepository {
           updatedAt: dump.updatedAt ?? DateTime.now().toUtc(),
         ),
       );
+      await _outbox.flush(_remote);
       return CatalogSyncResult.updated;
     } catch (_) {
       return CatalogSyncResult.offline;
@@ -91,7 +100,12 @@ class ParkRepository {
 
   Future<void> refreshRemote() async {
     await syncIfRemoteNewer();
+    await _outbox.flush(_remote);
   }
+
+  Future<int> flushOutbox() => _outbox.flush(_remote);
+
+  int get pendingSyncCount => _outbox.pendingCount;
 
   Future<List<Park>> _loadBundledFallback() async {
     try {
@@ -301,14 +315,27 @@ class ParkRepository {
     };
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, map);
 
-    return _remote.insertPriceReport(
-      parkId: parkId,
-      hourly: h ?? (existing['hourlyHkd'] as num?)?.toDouble(),
-      daily: d ?? (existing['dailyHkd'] as num?)?.toDouble(),
-      night: n ?? (existing['nightHkd'] as num?)?.toDouble(),
-      priceNote: noteOut.isEmpty ? null : noteOut,
-      confirmOnly: confirmOnly,
+    final hourlyOut = h ?? (existing['hourlyHkd'] as num?)?.toDouble();
+    final dailyOut = d ?? (existing['dailyHkd'] as num?)?.toDouble();
+    final nightOut = n ?? (existing['nightHkd'] as num?)?.toDouble();
+    final jobId = 'price-$parkId-${DateTime.now().millisecondsSinceEpoch}';
+    await _outbox.enqueue(
+      SyncJob(
+        id: jobId,
+        type: 'price',
+        createdAt: DateTime.now().toUtc(),
+        payload: {
+          'parkId': parkId,
+          'hourly': hourlyOut,
+          'daily': dailyOut,
+          'night': nightOut,
+          'priceNote': noteOut.isEmpty ? null : noteOut,
+          'confirmOnly': confirmOnly,
+        },
+      ),
     );
+    await _outbox.flush(_remote);
+    return !_outbox.read().any((j) => j.id == jobId);
   }
 
   Future<Park> reportNewPark({
@@ -359,7 +386,24 @@ class ParkRepository {
       source: 'ugc-new',
     );
 
-    await _remote.insertUgcPark(park, note: note, address: address);
+    await _outbox.enqueue(
+      SyncJob(
+        id: 'park-$id',
+        type: 'park',
+        createdAt: DateTime.now().toUtc(),
+        payload: {
+          'id': id,
+          'name': name,
+          'district': district,
+          'address': address,
+          'lat': park.lat,
+          'lng': park.lng,
+          'heightM': heightM,
+          'note': note,
+        },
+      ),
+    );
+    await _outbox.flush(_remote);
 
     if (hourly != null || daily != null || night != null) {
       await reportPrice(

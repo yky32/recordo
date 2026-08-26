@@ -323,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text('雲端場庫', style: RType.body()),
                           Text(
                             RecordoSupabase.isReady
-                                ? '開 app 單次載入本機 · 有更新先再下載'
+                                ? '本機場庫 · 有網先同雲對 version'
                                 : '未設定 · 用 OSM 後備',
                             style: RType.muted(),
                           ),

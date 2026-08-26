@@ -6,6 +6,7 @@ import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/session/parking_session.dart';
 
 void main() {
@@ -33,6 +34,44 @@ void main() {
     );
     expect(s.elapsed.inMinutes, 90);
     expect(s.isActive, isFalse);
+  });
+
+  test('outbox keeps last 80 jobs', () {
+    final first = SyncJob(
+      id: 'old',
+      type: 'price',
+      payload: const {'parkId': 'a'},
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    var q = enqueueJob(const [], first, max: 2);
+    q = enqueueJob(
+      q,
+      SyncJob(
+        id: 'n1',
+        type: 'price',
+        payload: const {'parkId': 'b'},
+        createdAt: DateTime.utc(2026, 1, 2),
+      ),
+      max: 2,
+    );
+    q = enqueueJob(
+      q,
+      SyncJob(
+        id: 'n2',
+        type: 'price',
+        payload: const {'parkId': 'c'},
+        createdAt: DateTime.utc(2026, 1, 3),
+      ),
+      max: 2,
+    );
+    expect(q.map((e) => e.id).toList(), ['n1', 'n2']);
+  });
+
+  test('resume sync is throttled to 30s', () {
+    final t0 = DateTime.utc(2026, 8, 26, 12);
+    expect(resumeShouldSync(null, t0), isTrue);
+    expect(resumeShouldSync(t0, t0.add(const Duration(seconds: 10))), isFalse);
+    expect(resumeShouldSync(t0, t0.add(const Duration(seconds: 30))), isTrue);
   });
 
   test('catalog dump is skipped when local version is current', () {

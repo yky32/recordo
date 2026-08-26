@@ -6,6 +6,7 @@ import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
+import 'package:recordo/features/parks/catalog_lifecycle.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -31,7 +32,7 @@ Future<void> main() async {
           BlocProvider(create: (_) => ParkCatalogCubit()..load()),
           BlocProvider(create: (_) => SessionCubit()..hydrate()),
         ],
-        child: const RecordoApp(),
+        child: const CatalogLifecycle(child: RecordoApp()),
       ),
     );
   } finally {
