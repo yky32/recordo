@@ -72,6 +72,12 @@ def find_pod_command
 end
 
 def run_pod_install
+  podfile = File.join(IOS_DIR, "Podfile")
+  unless File.exist?(podfile)
+    UI.message("No Podfile — iOS plugins use Swift Package Manager")
+    return true
+  end
+
   install_script = File.join(IOS_DIR, "install_gems_and_pods.sh")
   if File.executable?(install_script) && ENV["CI"] != "true"
     UI.message("Running pod install via install_gems_and_pods.sh...")
@@ -734,7 +740,7 @@ platform :ios do
     end
 
     if ci_build? && export_method == "app-store"
-      UI.message("Skipping pre-build pod install on CI (flutter build ipa runs pod install)")
+      UI.message("Skipping pre-build CocoaPods on CI (plugins use Swift Package Manager)")
     else
       run_pod_install
     end

@@ -80,14 +80,6 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
-      - name: Install CocoaPods dependencies
-        run: |
-          cd ios
-          export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-          env -u BUNDLE_GEMFILE -u BUNDLE_BIN_PATH -u BUNDLE_PATH \
-            PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
-            pod install --repo-update
-
       - name: Setup App Store Connect API key
         env:
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
