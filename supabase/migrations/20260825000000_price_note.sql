@@ -4,8 +4,10 @@
 alter table public.price_reports
   add column if not exists price_note text;
 
--- Latest snapshot includes note from newest report
-create or replace view public.park_prices as
+-- Latest snapshot includes note from newest report.
+-- Must drop: CREATE OR REPLACE cannot insert a column before price_updated_at.
+drop view if exists public.park_prices;
+create view public.park_prices as
 select
   pr.park_id,
   pr.hourly_hkd,

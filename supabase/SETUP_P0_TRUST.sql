@@ -19,7 +19,8 @@ create policy "price_reports_insert" on public.price_reports
   );
 
 -- Display snapshot: median of in-range reports (last 365d), not latest row
-create or replace view public.park_prices as
+drop view if exists public.park_prices;
+create view public.park_prices as
 with base as (
   select
     park_id,
