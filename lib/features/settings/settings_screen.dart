@@ -608,6 +608,7 @@ class _SettingsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: UberColors.elevated,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: UberColors.hairline),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

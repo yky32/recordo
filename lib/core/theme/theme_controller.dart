@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// App-wide theme mode. Default = dark (Uber night).
@@ -41,9 +40,7 @@ class ThemeController extends ChangeNotifier {
     if (_mode == mode) return;
     _mode = mode;
     _generation++;
-    // Sync frame so MaterialApp + KeyedSubtree rebuild same tick as toggle.
     notifyListeners();
-    SchedulerBinding.instance.ensureVisualUpdate();
 
     final prefs = await SharedPreferences.getInstance();
     final raw = switch (mode) {

@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
@@ -170,12 +171,18 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Map
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: SizedBox(
-                          height: 168,
-                          width: double.infinity,
-                          child: _MiniMap(park: p),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: UberColors.hairline),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: SizedBox(
+                            height: 168,
+                            width: double.infinity,
+                            child: _MiniMap(park: p),
+                          ),
                         ),
                       ),
                       SizedBox(height: 20),
@@ -200,9 +207,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         decoration: BoxDecoration(
                           color: UberColors.elevated,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: UberColors.hairline.withValues(alpha: 0.6),
-                          ),
+                          border: Border.all(color: UberColors.hairline),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,15 +219,67 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               style: RType.display().copyWith(fontSize: 28),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              p.trustLabel,
-                              style: RType.muted(),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    p.trustLabel,
+                                    style: RType.muted(),
+                                  ),
+                                ),
+                                if (p.trustTooltip != null) ...[
+                                  const SizedBox(width: 4),
+                                  Tooltip(
+                                    message: p.trustTooltip!,
+                                    triggerMode: TooltipTriggerMode.tap,
+                                    waitDuration: Duration.zero,
+                                    showDuration: const Duration(seconds: 3),
+                                    child: Icon(
+                                      Icons.info_outline_rounded,
+                                      size: 15,
+                                      color: UberColors.muted,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                             if (p.hasPrice) ...[
                               const SizedBox(height: 4),
-                              Text(
-                                p.freshnessLabel,
-                                style: RType.muted(),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule_rounded,
+                                    size: 14,
+                                    color: UberColors.muted,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  if (p.freshnessAgoLabel.isNotEmpty)
+                                    Flexible(
+                                      child: Text(
+                                        p.freshnessAgoLabel,
+                                        style: RType.muted(),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  else if (p.ugcConfirms <= 0)
+                                    Text('未有人更新', style: RType.muted()),
+                                  if (p.ugcConfirms > 0) ...[
+                                    if (p.freshnessAgoLabel.isNotEmpty)
+                                      Text(' · ', style: RType.muted()),
+                                    Icon(
+                                      Icons.person_rounded,
+                                      size: 14,
+                                      color: UberColors.muted,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      p.freshnessAgoLabel.isEmpty
+                                          ? '${p.ugcConfirms} 人報告'
+                                          : '${p.ugcConfirms} 人',
+                                      style: RType.muted(),
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 14),
                               Divider(height: 1, color: UberColors.hairline),
@@ -248,12 +305,6 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
                       const SizedBox(height: 12),
                       _PaidHistoryCard(parkId: p.id),
-
-                      const SizedBox(height: 14),
-                      Text(
-                        '價錢由用家更新，唔係 Google 或場方官方。',
-                        style: RType.muted(),
-                      ),
 
                       const SizedBox(height: 20),
 
@@ -284,9 +335,9 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                             if (p.hasPrice) ...[
                               Expanded(
                                 child: _ActionHalf(
-                                  icon: Icons.check_circle_outline_rounded,
-                                  title: '價錢仍然啱',
-                                  subtitle: '確認收費',
+                                  icon: Icons.check_rounded,
+                                  title: '確認',
+                                  subtitle: '價錢仍然啱',
                                   accent: true,
                                   onTap: () => _confirm(context, p),
                                 ),
@@ -296,7 +347,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                             Expanded(
                               child: _ActionHalf(
                                 icon: Icons.edit_outlined,
-                                title: '改收費',
+                                title: '改價',
                                 subtitle: '時 / 日 / 夜 / 備註',
                                 onTap: () {
                                   setState(() {
@@ -388,10 +439,9 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
         alignLabelWithHint: maxLines > 1,
         filled: true,
         fillColor: UberColors.elevated,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
+        border: UberColors.fieldOutline(),
+        enabledBorder: UberColors.fieldOutline(),
+        focusedBorder: UberColors.fieldOutline(focused: true),
       ),
     );
   }
@@ -428,9 +478,7 @@ class _PaidHistoryCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: UberColors.elevated,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: UberColors.hairline.withValues(alpha: 0.6),
-            ),
+            border: Border.all(color: UberColors.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,37 +571,51 @@ class _ActionHalf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: accent ? const Color(0xFF1A2E1A) : UberColors.elevated,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                icon,
-                color: accent ? UberColors.accent : UberColors.white,
-                size: 22,
+    final fg = accent ? UberColors.accent : UberColors.white;
+    const shape = StadiumBorder();
+    return Tooltip(
+      message: subtitle,
+      waitDuration: const Duration(milliseconds: 400),
+      child: SizedBox(
+        height: 48,
+        child: Material(
+          color: accent
+              ? UberColors.accent.withValues(alpha: 0.12)
+              : Colors.transparent,
+          shape: shape.copyWith(
+            side: BorderSide(
+              color: accent
+                  ? UberColors.accent.withValues(alpha: 0.4)
+                  : UberColors.hairline,
+            ),
+          ),
+          child: InkWell(
+            customBorder: shape,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: fg, size: 18),
+                  const SizedBox(width: 7),
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: RType.body().copyWith(
+                        color: fg,
+                        fontSize: 14,
+                        height: 1.1,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                title,
-                style: RType.body(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: RType.muted(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -568,46 +630,55 @@ class _MiniMap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = LatLng(park.lat, park.lng);
-    return AbsorbPointer(
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: pt,
-          initialZoom: 15.2,
-          interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.none,
-          ),
-          backgroundColor: UberColors.mapBlock,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate:
-                UberColors.mapTileUrl,
-            subdomains: const ['a', 'b', 'c', 'd'],
-            userAgentPackageName: 'com.recordo',
-          ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: pt,
-                width: 40,
-                height: 40,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: UberColors.accent,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (context, _) {
+        return AbsorbPointer(
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: pt,
+              initialZoom: 15.2,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.none,
+              ),
+              backgroundColor: UberColors.mapBlock,
+            ),
+            children: [
+              TileLayer(
+                key: ValueKey(UberColors.mapTileUrl),
+                urlTemplate: UberColors.mapTileUrl,
+                fallbackUrl: UberColors.mapTileFallback,
+                subdomains: const ['a', 'b', 'c', 'd'],
+                userAgentPackageName: 'com.recordo',
+                retinaMode: false,
+                maxNativeZoom: 19,
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: pt,
+                    width: 40,
+                    height: 40,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: UberColors.accent,
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: UberColors.onAccent, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.local_parking_rounded,
+                        color: UberColors.onAccent,
+                        size: 22,
+                      ),
+                    ),
                   ),
-                  child: Icon(
-                    Icons.local_parking_rounded,
-                    color: UberColors.black,
-                    size: 22,
-                  ),
-                ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

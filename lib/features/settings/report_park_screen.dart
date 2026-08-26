@@ -177,6 +177,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
             decoration: BoxDecoration(
               color: UberColors.elevated,
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: UberColors.hairline),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,10 +268,9 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
         hintStyle: RType.muted(),
         filled: true,
         fillColor: UberColors.elevated,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
+        border: UberColors.fieldOutline(),
+        enabledBorder: UberColors.fieldOutline(),
+        focusedBorder: UberColors.fieldOutline(focused: true),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),

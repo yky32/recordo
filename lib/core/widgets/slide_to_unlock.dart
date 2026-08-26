@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 
 /// Uber-style horizontal slide-to-confirm (full travel required).
 class SlideToUnlock extends StatefulWidget {
@@ -170,7 +171,11 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
+                            color: Colors.black.withValues(
+                              alpha: ThemeController.instance.isDark
+                                  ? 0.35
+                                  : 0.12,
+                            ),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),

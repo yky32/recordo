@@ -83,6 +83,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
         return Scaffold(
           backgroundColor: UberColors.black,
+          // Sheet owns the keyboard — don't crush the timer behind it.
+          resizeToAvoidBottomInset: false,
           body: Column(
             children: [
               SizedBox(height: top + 8),
@@ -108,9 +110,14 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    children: [
-                      const Spacer(flex: 2),
+                  child: CustomScrollView(
+                    physics: const ClampingScrollPhysics(),
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Column(
+                          children: [
+                            const Spacer(flex: 2),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 14,
@@ -226,7 +233,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                           ],
                         ),
                       ),
-                      const Spacer(flex: 3),
+                            const Spacer(flex: 3),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),

@@ -38,6 +38,7 @@ class HistoryScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: UberColors.elevated,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: UberColors.hairline),
                 ),
                 child: Row(
                   children: [
@@ -58,6 +59,7 @@ class HistoryScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: UberColors.elevated,
                     borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: UberColors.hairline),
                   ),
                   child: Row(
                     children: [

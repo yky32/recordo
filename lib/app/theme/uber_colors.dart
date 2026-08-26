@@ -27,10 +27,18 @@ abstract final class UberColors {
       _dark ? const Color(0xFF8E8E93) : const Color(0xFF6B6B6B);
 
   static Color get hairline =>
-      _dark ? const Color(0xFF3A3A3C) : const Color(0xFFE0E0E0);
+      _dark ? const Color(0xFF3A3A3C) : const Color(0xFFD6D6D6);
 
   /// Soft green status — not Uber trademark lockup.
   static const accent = Color(0xFF06C167);
+
+  /// Confirm / success chip. Dark forest in night, mint in light so body
+  /// text (`white` token) stays readable without a special on-color.
+  static Color get accentSurface =>
+      _dark ? const Color(0xFF1A2E1A) : const Color(0xFFDFF6E8);
+
+  /// Always-white glyph on solid [accent] (P badge, selected pin).
+  static const onAccent = Color(0xFFFFFFFF);
 
   static const danger = Color(0xFFFF3B30);
 
@@ -58,7 +66,23 @@ abstract final class UberColors {
       _dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 
   /// CARTO basemap — plain PNG (no {r} retina token; more reliable on iOS).
+  /// Light uses Voyager: `light_all` is near-white and reads as an empty card.
   static String get mapTileUrl => _dark
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+
+  static const mapTileFallback =
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+
+  static OutlineInputBorder fieldOutline({bool focused = false}) {
+    return OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(
+        color: focused
+            ? (_dark ? const Color(0x66FFFFFF) : const Color(0xFF111111))
+            : hairline,
+        width: focused ? 1.4 : 1,
+      ),
+    );
+  }
 }

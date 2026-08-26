@@ -60,20 +60,33 @@ class Park {
     if (ugcConfirms >= 8) return '較多司機報告 · 中位參考價';
     if (ugcConfirms >= 3) return '$ugcConfirms 人報告 · 中位參考價';
     if (ugcConfirms == 2) return '2 人報告 · 仍可能有偏差';
-    if (ugcConfirms == 1) return '只有 1 人報告 · 僅供參考';
+    if (ugcConfirms == 1) return '只有 1 人報告';
     return freshnessLabel;
   }
 
-  String get freshnessLabel {
+  /// Optional hint for a 1-report price (shown as tooltip).
+  String? get trustTooltip {
+    if (hasPrice && ugcConfirms == 1) return '僅供參考';
+    return null;
+  }
+
+  /// Time-only freshness, e.g. `25 小時前更新`. Empty if never updated.
+  String get freshnessAgoLabel {
     final t = priceUpdatedAt;
-    if (t == null) {
+    if (t == null) return '';
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前更新';
+    if (d.inHours < 48) return '${d.inHours} 小時前更新';
+    return '${d.inDays} 日前更新';
+  }
+
+  String get freshnessLabel {
+    final ago = freshnessAgoLabel;
+    if (ago.isEmpty) {
       return ugcConfirms > 0 ? '$ugcConfirms 人報告' : '未有人更新';
     }
-    final d = DateTime.now().difference(t);
     final who = ugcConfirms > 0 ? ' · $ugcConfirms 人' : '';
-    if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前更新$who';
-    if (d.inHours < 48) return '${d.inHours} 小時前更新$who';
-    return '${d.inDays} 日前更新$who';
+    return '$ago$who';
   }
 
   Park copyWith({

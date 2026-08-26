@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park.dart';
 
 /// Dark “city map” canvas — Uber density without Maps SDK key.
@@ -81,24 +82,28 @@ class _Pin extends StatelessWidget {
           width: s,
           height: s,
           decoration: BoxDecoration(
-            color: selected ? UberColors.accent : UberColors.white,
+            color: selected ? UberColors.accent : UberColors.elevated,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
+                color: Colors.black.withValues(
+                  alpha: ThemeController.instance.isDark ? 0.45 : 0.12,
+                ),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
             ],
             border: Border.all(
-              color: UberColors.black.withValues(alpha: 0.35),
+              color: selected
+                  ? UberColors.onAccent
+                  : UberColors.hairline,
               width: 2,
             ),
           ),
           child: Icon(
             Icons.local_parking_rounded,
             size: selected ? 22 : 18,
-            color: selected ? UberColors.black : UberColors.black,
+            color: selected ? UberColors.onAccent : UberColors.white,
           ),
         ),
       ),
@@ -146,7 +151,9 @@ class _MapPainter extends CustomPainter {
       ..shader = RadialGradient(
         colors: [
           Colors.transparent,
-          Colors.black.withValues(alpha: 0.55),
+          Colors.black.withValues(
+            alpha: ThemeController.instance.isDark ? 0.55 : 0.08,
+          ),
         ],
         radius: 0.95,
       ).createShader(Offset.zero & size);

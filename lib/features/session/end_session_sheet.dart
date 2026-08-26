@@ -131,10 +131,9 @@ class _EndSessionSheetBodyState extends State<_EndSessionSheetBody> {
               hintText: '0',
               filled: true,
               fillColor: UberColors.elevated,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
+              border: UberColors.fieldOutline(),
+              enabledBorder: UberColors.fieldOutline(),
+              focusedBorder: UberColors.fieldOutline(focused: true),
             ),
           ),
           const SizedBox(height: 12),

@@ -81,14 +81,14 @@ class ParkMapState extends State<ParkMap> {
     if (id == null) return;
     final p = widget.parks.where((e) => e.id == id).firstOrNull;
     if (p == null) return;
-    _centerOn(LatLng(p.lat, p.lng), zoom: 15.5);
+    _centerOn(LatLng(p.lat, p.lng), zoom: 17.2);
   }
 
   /// Place [ll] in the upper part of search↔sheet band (not mid —
   /// mid sits on the sheet lip and "almost blocks" the pin).
   void _centerOn(LatLng ll, {double? zoom}) {
     if (!mounted) return;
-    final z = (zoom ?? 15.5).clamp(14.0, 16.5);
+    final z = (zoom ?? 15.5).clamp(14.0, 18.0);
     final h = MediaQuery.sizeOf(context).height;
 
     var top = widget.bandTopY;
@@ -295,8 +295,7 @@ class ParkMapState extends State<ParkMap> {
               key: ValueKey(tileUrl),
               // No {r} — retina @2x broke some CDN paths on device
               urlTemplate: tileUrl,
-              fallbackUrl:
-                  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+              fallbackUrl: UberColors.mapTileFallback,
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.recordo',
               retinaMode: false,
@@ -344,18 +343,23 @@ class _ParkPin extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = selected ? 46.0 : 32.0;
+    final dark = ThemeController.instance.isDark;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
       width: s,
       height: s,
       decoration: BoxDecoration(
-        color: selected ? UberColors.accent : UberColors.elevated2,
+        color: selected
+            ? UberColors.accent
+            : (dark ? UberColors.elevated2 : Colors.white),
         shape: BoxShape.circle,
         border: Border.all(
           color: selected
-              ? UberColors.white
-              : UberColors.white.withValues(alpha: 0.35),
-          width: selected ? 3 : 1,
+              ? UberColors.onAccent
+              : (dark
+                  ? Colors.white.withValues(alpha: 0.35)
+                  : const Color(0xFF111111).withValues(alpha: 0.2)),
+          width: selected ? 3 : 1.5,
         ),
         boxShadow: selected
             ? [
@@ -365,12 +369,18 @@ class _ParkPin extends StatelessWidget {
                   spreadRadius: 1,
                 ),
               ]
-            : null,
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: dark ? 0.35 : 0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Icon(
         Icons.local_parking_rounded,
         size: selected ? 24 : 16,
-        color: selected ? UberColors.black : UberColors.white,
+        color: selected ? UberColors.onAccent : UberColors.white,
       ),
     );
   }

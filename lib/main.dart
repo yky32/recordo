@@ -10,26 +10,33 @@ import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-  await Bootstrap.init();
-  await ThemeController.instance.hydrate();
-  await RecordoSupabase.init();
-  await LiveActivityService.instance.init();
-  _syncSystemUi();
-  ThemeController.instance.addListener(_syncSystemUi);
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Hold the first engine frame until runApp so leftover raster timings
+  // (hot restart / async init) don't hit Flutter's debug first-frame assert.
+  binding.deferFirstFrame();
+  try {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    await Bootstrap.init();
+    await ThemeController.instance.hydrate();
+    await RecordoSupabase.init();
+    await LiveActivityService.instance.init();
+    _syncSystemUi();
+    ThemeController.instance.addListener(_syncSystemUi);
 
-  runApp(
-    MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => ParkCatalogCubit()..load()),
-        BlocProvider(create: (_) => SessionCubit()..hydrate()),
-      ],
-      child: const RecordoApp(),
-    ),
-  );
+    runApp(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => ParkCatalogCubit()..load()),
+          BlocProvider(create: (_) => SessionCubit()..hydrate()),
+        ],
+        child: const RecordoApp(),
+      ),
+    );
+  } finally {
+    binding.allowFirstFrame();
+  }
 }
 
 void _syncSystemUi() {
