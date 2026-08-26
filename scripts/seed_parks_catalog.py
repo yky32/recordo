@@ -238,6 +238,32 @@ insert into public.parks (
 """.strip()
 
 
+def pooler_conninfo() -> str | None:
+    pw = os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    if not pw or not url:
+        return None
+    region = os.environ.get("SUPABASE_REGION", "ap-northeast-1").strip()
+    ref = project_ref(url)
+    return (
+        f"host=aws-0-{region}.pooler.supabase.com port=6543 dbname=postgres "
+        f"user=postgres.{ref} password={pw} sslmode=require connect_timeout=20"
+    )
+
+
+def run_sql_psycopg(sql: str) -> None:
+    try:
+        import psycopg
+    except ImportError as e:
+        raise SystemExit("Need psycopg: pip install 'psycopg[binary]'") from e
+    conninfo = pooler_conninfo()
+    if not conninfo:
+        raise SystemExit("Need SUPABASE_URL + SUPABASE_DB_PASSWORD for pooler")
+    with psycopg.connect(conninfo) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+
+
 def run_sql_management(token: str, ref: str, sql: str) -> None:
     body = json.dumps({"query": sql}).encode("utf-8")
     req = urllib.request.Request(
@@ -248,6 +274,11 @@ def run_sql_management(token: str, ref: str, sql: str) -> None:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            # Cloudflare 1010 without a browser UA
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            ),
         },
     )
     try:
@@ -269,17 +300,21 @@ def run_sql_psql(database_url: str, sql: str) -> None:
 
 
 def run_sql(sql: str) -> None:
-    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-    url = os.environ.get("SUPABASE_URL", "").strip()
     db = os.environ.get("DATABASE_URL", "").strip()
-    if token and url:
-        run_sql_management(token, project_ref(url), sql)
+    if pooler_conninfo():
+        run_sql_psycopg(sql)
         return
     if db:
         run_sql_psql(db, sql)
         return
+    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    if token and url:
+        run_sql_management(token, project_ref(url), sql)
+        return
     raise SystemExit(
-        "Need SUPABASE_ACCESS_TOKEN + SUPABASE_URL, or DATABASE_URL"
+        "Need SUPABASE_URL + SUPABASE_DB_PASSWORD (Tokyo pooler), "
+        "or DATABASE_URL, or SUPABASE_ACCESS_TOKEN"
     )
 
 
