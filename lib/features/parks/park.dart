@@ -29,6 +29,18 @@ String prettyParkName(String raw) {
   return '$base（$kind）';
 }
 
+int jsonInt(dynamic v, [int fallback = 0]) {
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  return int.tryParse('$v') ?? fallback;
+}
+
+double? jsonDouble(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  return double.tryParse('$v');
+}
+
 class Park {
   const Park({
     required this.id,
@@ -143,6 +155,41 @@ class Park {
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
       source: source ?? this.source,
       priceNote: priceNote ?? this.priceNote,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'district': district,
+        'lat': lat,
+        'lng': lng,
+        'hourlyHkd': hourlyHkd,
+        'dailyHkd': dailyHkd,
+        'nightHkd': nightHkd,
+        'heightM': heightM,
+        'ugcConfirms': ugcConfirms,
+        'priceUpdatedAt': priceUpdatedAt?.toUtc().toIso8601String(),
+        'source': source,
+        'priceNote': priceNote,
+      };
+
+  factory Park.fromJson(Map<String, dynamic> m) {
+    final updated = m['priceUpdatedAt'] ?? m['price_updated_at'];
+    return Park(
+      id: m['id'] as String? ?? 'unknown',
+      name: prettyParkName(m['name'] as String? ?? '停車場'),
+      district: m['district'] as String? ?? '香港',
+      lat: jsonDouble(m['lat']) ?? 22.3,
+      lng: jsonDouble(m['lng']) ?? 114.17,
+      hourlyHkd: jsonDouble(m['hourlyHkd'] ?? m['hourly_hkd']),
+      dailyHkd: jsonDouble(m['dailyHkd'] ?? m['daily_hkd']),
+      nightHkd: jsonDouble(m['nightHkd'] ?? m['night_hkd']),
+      heightM: jsonDouble(m['heightM'] ?? m['height_m']),
+      ugcConfirms: jsonInt(m['ugcConfirms'] ?? m['ugc_confirms']),
+      priceUpdatedAt: updated != null ? DateTime.tryParse('$updated') : null,
+      source: m['source'] as String? ?? 'osm',
+      priceNote: '${m['priceNote'] ?? m['price_note'] ?? ''}'.trim(),
     );
   }
 }

@@ -56,4 +56,5 @@ scripts/local/
 .env.supabase
 .env.supabase.*
 !.env.supabase.example
+supabase/.temp/
 

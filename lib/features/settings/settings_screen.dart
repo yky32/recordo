@@ -9,6 +9,7 @@ import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/parks/park_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uber-style settings hub.
@@ -81,6 +82,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cat = context.watch<ParkCatalogCubit>().state;
+    final syncSubtitle = !RecordoSupabase.isReady
+        ? '要先設定 Supabase'
+        : (cat.fromCloud && cat.catalogVersion > 0)
+            ? '本機 v${cat.catalogVersion} · ${cat.totalInDb} 個 · 有新版本先下載'
+            : '未下載雲端場庫 · 而家用本機後備';
     return Scaffold(
       backgroundColor: UberColors.black,
       appBar: AppBar(
@@ -313,11 +320,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('雲端 UGC', style: RType.body()),
+                          Text('雲端場庫', style: RType.body()),
                           Text(
                             RecordoSupabase.isReady
-                                ? '大家更新場價 · 互相看到'
-                                : '未設定 · 只有本機',
+                                ? '開 app 單次載入本機 · 有更新先再下載'
+                                : '未設定 · 用 OSM 後備',
                             style: RType.muted(),
                           ),
                         ],
@@ -332,10 +339,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _NavRow(
                 icon: Icons.sync_rounded,
-                title: '同步最新場價',
-                subtitle: RecordoSupabase.isReady
-                    ? '拉其他用戶分享嘅收費'
-                    : '要先設定 Supabase',
+                title: '檢查場庫更新',
+                subtitle: syncSubtitle,
                 onTap: () async {
                   if (!RecordoSupabase.isReady) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -346,15 +351,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     return;
                   }
                   HapticFeedback.selectionClick();
-                  final ok =
+                  final result =
                       await context.read<ParkCatalogCubit>().syncFromCloud();
                   if (!context.mounted) return;
+                  final msg = switch (result) {
+                    CatalogSyncResult.updated => '已下載最新場庫 · 可以離線用',
+                    CatalogSyncResult.unchanged => '場庫已係最新 · 繼續用本機',
+                    CatalogSyncResult.offline => '無網絡或未連雲端 · 繼續用本機',
+                  };
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        ok ? '已同步最新停車場資訊' : '同步失敗 · 檢查網絡',
-                      ),
-                    ),
+                    SnackBar(content: Text(msg)),
                   );
                 },
               ),

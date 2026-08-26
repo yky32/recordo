@@ -1,6 +1,6 @@
 # Recordo × Supabase · Common DB 教學 + 計劃
 
-目標：**多部機共享 UGC**（場價、備註、新場）。OSM 3k+ skeleton **仍然喺 app bundle**，唔入 Supabase。
+目標：**全港場庫喺 cloud**。App 開一次就 dump 落本機玩；之後只喺 `catalog_meta.version` 新過本機先再 dump。
 
 ---
 
@@ -8,31 +8,35 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Recordo app (offline-first)                │
-│  · OSM json asset                           │
-│  · seed prices                              │
-│  · SharedPreferences (本機 UGC 永遠可寫)      │
-│  · Supabase client (有 key 先連)             │
+│  Recordo app                                │
+│  · 本機 catalog snapshot（離線玩）            │
+│  · OSM json = 第一次 / 無網後備               │
+│  · SharedPreferences（自己改價、報新場 overlay）│
+│  · 開 app：讀本機 → GET version → 有更新先 dump │
 └──────────────────┬──────────────────────────┘
                    │ anon key + RLS
                    ▼
 ┌─────────────────────────────────────────────┐
 │  Supabase Postgres                          │
-│  parks_ugc        用戶報新場                  │
-│  price_reports    每次改價 / 確認 / 備註       │
-│  park_prices      view = 每場最新價 + 次數     │
+│  parks            全港場庫（OSM+seed+UGC+價）  │
+│  catalog_meta     version / park_count       │
+│  catalog_dump()   一次過 jsonb dump           │
+│  parks_ugc        用戶報新場（trigger → parks）│
+│  price_reports    改價（trigger 寫回 parks）   │
+│  park_prices      view = 中位價               │
 └─────────────────────────────────────────────┘
 ```
 
 | 數據 | 放邊 |
 |------|------|
-| 全港 OSM 骨架 | App `assets/data/hk_osm_parks.json` |
-| Seed 示範價 | `hk_seed_parks.dart` |
-| **共享場價 + 備註** | Supabase `price_reports` → view `park_prices` |
-| **共享新場** | Supabase `parks_ugc` |
-| 你自己嘅計時 / 實付 history | **本機**（私隱；之後可選 upload） |
+| **全港場庫** | Cloud `parks` → 本機 `catalog/parks_v1.json` |
+| OSM 後備 | App `assets/data/hk_osm_parks.json`（未 dump 或無網） |
+| Seed 示範價 | seed script 寫入 `parks` |
+| **共享場價 + 備註** | `price_reports` → 寫入 `parks` + version++ |
+| **共享新場** | `parks_ugc` → `parks` + version++ |
+| 你自己嘅計時 / 實付 history | **本機** |
 
-原則：**永遠先寫本機，再 best-effort 推 cloud**。無網 / 無 key 都唔會 crash。
+原則：**永遠先用本機 snapshot 開地圖**；version 無變就 0 download。改價仍然先寫本機再推雲。
 
 ---
 
@@ -135,10 +139,10 @@ Fastlane / `flutter build ipa` 要帶：
 
 | 動作 | 本地 | Cloud |
 |------|------|--------|
-| 改收費 / 備註 | `ugcPrices` prefs | `price_reports` insert |
+| 改收費 / 備註 | `ugcPrices` prefs | `price_reports` insert → parks + version++ |
 | 確認價錢仍然啱 | confirms++ | insert `confirm_only` |
-| 報告新場 | `ugcNewParks` | `parks_ugc` upsert |
-| App 啟動 | merge seed+OSM+local | `fetch park_prices` + `parks_ugc` |
+| 報告新場 | `ugcNewParks` | `parks_ugc` upsert → parks + version++ |
+| App 啟動 | 讀本機 snapshot | `catalog_meta.version`；新先 `catalog_dump()` |
 
 Settings：**雲端 UGC** = 有冇 initialize 成功。
 
@@ -171,7 +175,13 @@ Settings：**雲端 UGC** = 有冇 initialize 成功。
 - Admin dashboard  
 - Realtime subscribe `price_reports`  
 
-**刻意唔放：** 全港 OSM dump、vacancy live API、service_role 入 client。
+**刻意唔放：** vacancy live API、service_role 入 client。OSM 而家 seed 入 `parks`；app bundle 只係後備。
+
+Seed（GHA 喺 `db push` 之後跑）：
+```bash
+python3 scripts/seed_parks_catalog.py
+# needs SUPABASE_ACCESS_TOKEN + SUPABASE_URL
+```
 
 ---
 

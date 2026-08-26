@@ -14,6 +14,8 @@ class ParkCatalogState {
     this.pinLng,
     this.query = '',
     this.totalInDb = 0,
+    this.catalogVersion = 0,
+    this.fromCloud = false,
   });
 
   final List<Park> parks;
@@ -25,8 +27,10 @@ class ParkCatalogState {
   final double? pinLat;
   final double? pinLng;
   final String query;
-  /// Full catalog size (OSM+seed), not just nearby window.
+  /// Full catalog size, not just nearby window.
   final int totalInDb;
+  final int catalogVersion;
+  final bool fromCloud;
 
   Park? get selected {
     if (selectedId == null) return null;
@@ -48,6 +52,8 @@ class ParkCatalogState {
     double? pinLng,
     String? query,
     int? totalInDb,
+    int? catalogVersion,
+    bool? fromCloud,
     bool clearSelected = false,
   }) {
     return ParkCatalogState(
@@ -60,6 +66,8 @@ class ParkCatalogState {
       pinLng: pinLng ?? this.pinLng,
       query: query ?? this.query,
       totalInDb: totalInDb ?? this.totalInDb,
+      catalogVersion: catalogVersion ?? this.catalogVersion,
+      fromCloud: fromCloud ?? this.fromCloud,
     );
   }
 }
@@ -71,21 +79,27 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   final ParkRepository _repo;
 
-  Future<void> load() async {
-    emit(state.copyWith(loading: true));
-    await _repo.ensureLoaded();
-    // Open app / resume: always try pull shared prices (no manual refresh needed)
-    try {
-      await _repo.refreshRemote();
-    } catch (_) {}
+  void _emitCatalog({bool loading = false}) {
     final all = _repo.allWithUgc();
     emit(
       state.copyWith(
         parks: _pipeline(all),
-        loading: false,
+        loading: loading,
         totalInDb: all.length,
+        catalogVersion: _repo.catalogVersion,
+        fromCloud: _repo.playingFromCloudSnapshot,
       ),
     );
+  }
+
+  Future<void> load() async {
+    emit(state.copyWith(loading: true));
+    await _repo.loadLocalFirst();
+    _emitCatalog();
+    final result = await _repo.syncIfRemoteNewer();
+    if (result == CatalogSyncResult.updated) {
+      _emitCatalog();
+    }
   }
 
   void select(String? id) => emit(state.copyWith(selectedId: id));
@@ -211,19 +225,19 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       priceNote: priceNote,
       confirmOnly: confirmOnly,
     );
-    await load();
+    _emitCatalog();
     select(parkId);
     return cloud;
   }
 
-  /// Pull latest shared UGC prices / new parks from Supabase.
-  Future<bool> syncFromCloud() async {
+  /// Check cloud version; dump only if newer.
+  Future<CatalogSyncResult> syncFromCloud({bool force = false}) async {
     try {
-      await _repo.refreshRemote();
-      await load();
-      return true;
+      final result = await _repo.syncIfRemoteNewer(force: force);
+      _emitCatalog();
+      return result;
     } catch (_) {
-      return false;
+      return CatalogSyncResult.offline;
     }
   }
 
@@ -251,7 +265,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       heightM: heightM,
       note: note,
     );
-    await load();
+    _emitCatalog();
     select(p.id);
   }
 

@@ -7,8 +7,8 @@
 | 層 | 做咩 |
 |----|------|
 | **App Store binary** | compile 時打入 `SUPABASE_URL` + `SUPABASE_ANON_KEY` |
-| **Supabase** | 公共 UGC DB（`price_reports` / `parks_ugc`） |
-| **App 行為** | 開 app 拉 cloud；改價推 cloud；設定「同步最新場價」 |
+| **Supabase** | 全港場庫 `parks` + UGC（`price_reports` / `parks_ugc`）+ `catalog_meta.version` |
+| **App 行為** | 開 app 用本機 snapshot；version 新先 dump；改價推 cloud；設定「檢查場庫更新」 |
 
 本機永遠可離線用；有雲先「共享」。
 
@@ -19,7 +19,7 @@
 ### A. Supabase（你）
 - [ ] Project Ready（`recordo-app`）
 - [ ] SQL：跑 `supabase/SETUP_ALL.sql`（一次）
-- [ ] Table Editor 見到 `price_reports`、`parks_ugc`
+- [ ] Table Editor 見到 `parks`、`catalog_meta`、`price_reports`、`parks_ugc`
 - [ ] 本機 `./scripts/run_recordo_supabase.sh` → 設定顯示 **已連**
 - [ ] 機 A 改價 → 機 B 同步見到
 
@@ -50,10 +50,10 @@ Schema：Actions → **Supabase** → Run workflow（`supabase db push`）。
 
 ## 用戶體感（上架後）
 
-1. 開 app → 自動拉最新 shared 價  
-2. 詳情改價 / 確認 → 寫本機 + 推雲  
-3. 設定 → **同步最新場價** → 手動 refresh  
-4. 更新 App 版本 → **同一 Supabase**，資料唔會因版本清空（OSM 在 bundle 可更新；UGC 在 cloud）
+1. 開 app → 讀本機場庫；cloud version 新先 dump 一次  
+2. 詳情改價 / 確認 → 寫本機 + 推雲（version++，其他人下次開 app 先再 dump）  
+3. 設定 → **檢查場庫更新** → 手動 version check  
+4. 更新 App 版本 → **同一 Supabase**，本機 snapshot 仍可用；OSM bundle 只係後備
 
 ---
 

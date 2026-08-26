@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/session/parking_session.dart';
@@ -28,5 +31,63 @@ void main() {
     );
     expect(s.elapsed.inMinutes, 90);
     expect(s.isActive, isFalse);
+  });
+
+  test('catalog dump is skipped when local version is current', () {
+    expect(
+      catalogNeedsDump(localVersion: 3, remoteVersion: 3, localCount: 100),
+      isFalse,
+    );
+    expect(
+      catalogNeedsDump(localVersion: 3, remoteVersion: 4, localCount: 100),
+      isTrue,
+    );
+    expect(
+      catalogNeedsDump(localVersion: 0, remoteVersion: 1, localCount: 0),
+      isTrue,
+    );
+  });
+
+  test('park json roundtrip', () {
+    const p = Park(
+      id: 'osm:way/1',
+      name: '測試場',
+      district: '中環',
+      lat: 22.28,
+      lng: 114.16,
+      hourlyHkd: 28,
+      ugcConfirms: 2,
+      source: 'seed+osm',
+      priceNote: '首小時 28',
+    );
+    final again = Park.fromJson(p.toJson());
+    expect(again.id, p.id);
+    expect(again.name, p.name);
+    expect(again.hourlyHkd, 28);
+    expect(again.priceNote, '首小時 28');
+  });
+
+  test('catalog cache writes a local snapshot', () async {
+    final dir = await Directory.systemTemp.createTemp('recordo-cat');
+    addTearDown(() => dir.delete(recursive: true));
+    final cache = CatalogCache(directory: dir);
+    await cache.write(
+      CatalogDump(
+        version: 7,
+        parks: const [
+          Park(
+            id: 'a',
+            name: 'A',
+            district: '香港',
+            lat: 22.3,
+            lng: 114.17,
+          ),
+        ],
+      ),
+    );
+    final snap = await cache.read();
+    expect(snap, isNotNull);
+    expect(snap!.version, 7);
+    expect(snap.parks.single.id, 'a');
   });
 }

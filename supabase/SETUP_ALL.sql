@@ -1,6 +1,7 @@
--- Recordo UGC schema (Supabase / Postgres)
--- Run in Supabase SQL Editor, or: supabase db push
--- OSM skeleton stays in the app bundle; this DB is for shared UGC only.
+-- Convenience snapshot. Source of truth is supabase/migrations/ (GHA db push).
+-- Includes original UGC tables. Canonical catalog is
+-- supabase/migrations/20260826010000_parks_catalog.sql (parks + catalog_meta).
+-- OSM skeleton stays in the app bundle as offline fallback only.
 
 -- New parks reported by users (not already in OSM asset)
 create table if not exists public.parks_ugc (
