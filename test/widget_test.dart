@@ -7,6 +7,7 @@ import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
+import 'package:recordo/features/parks/sync_rules.dart';
 import 'package:recordo/features/session/parking_session.dart';
 
 void main() {
@@ -72,6 +73,79 @@ void main() {
     expect(resumeShouldSync(null, t0), isTrue);
     expect(resumeShouldSync(t0, t0.add(const Duration(seconds: 10))), isFalse);
     expect(resumeShouldSync(t0, t0.add(const Duration(seconds: 30))), isTrue);
+  });
+
+  test('overlay wins only while local is newer than dump', () {
+    final local = DateTime.utc(2026, 8, 26, 12, 1);
+    final dump = DateTime.utc(2026, 8, 26, 12);
+    expect(overlayWins(localTs: local, dumpTs: dump), isTrue);
+    expect(overlayWins(localTs: dump, dumpTs: local), isFalse);
+    expect(overlayWins(localTs: local, dumpTs: local), isFalse);
+    expect(overlayWins(localTs: local, dumpTs: null), isTrue);
+    expect(overlayWins(localTs: null, dumpTs: dump), isFalse);
+  });
+
+  test('price patch when prices_updated_at is newer', () {
+    final t0 = DateTime.utc(2026, 8, 26, 12);
+    expect(
+      catalogNeedsPricePatch(localPricesAt: t0, remotePricesAt: t0.add(const Duration(minutes: 1))),
+      isTrue,
+    );
+    expect(
+      catalogNeedsPricePatch(localPricesAt: t0, remotePricesAt: t0),
+      isFalse,
+    );
+    expect(
+      catalogNeedsPricePatch(localPricesAt: null, remotePricesAt: t0),
+      isTrue,
+    );
+  });
+
+  test('seed overlay id remaps onto nearby OSM catalog id', () {
+    const seed = Park(
+      id: 'ts_causeway',
+      name: '時代廣場停車場',
+      district: '銅鑼灣',
+      lat: 22.2783,
+      lng: 114.1827,
+    );
+    const osm = Park(
+      id: 'osm:node/1',
+      name: '時代廣場停車場',
+      district: '銅鑼灣',
+      lat: 22.27831,
+      lng: 114.18271,
+    );
+    expect(
+      remapLocalParkId(localId: 'ts_causeway', seed: seed, catalog: const [osm]),
+      'osm:node/1',
+    );
+    expect(
+      remapLocalParkId(localId: 'osm:node/1', seed: null, catalog: const [osm]),
+      'osm:node/1',
+    );
+  });
+
+  test('poison and exhausted outbox jobs are dropped', () {
+    final poison = SyncJob(
+      id: 'x',
+      type: 'price',
+      payload: const {'parkId': ''},
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+    expect(outboxJobPoison(poison), isTrue);
+    expect(outboxAfterFailure(poison), isNull);
+
+    var job = SyncJob(
+      id: 'y',
+      type: 'price',
+      payload: const {'parkId': 'osm:way/1'},
+      createdAt: DateTime.utc(2026, 1, 1),
+      tries: 7,
+    );
+    expect(outboxAfterFailure(job), isNull);
+    job = job.copyWith(tries: 2);
+    expect(outboxAfterFailure(job)!.tries, 3);
   });
 
   test('catalog dump is skipped when local version is current', () {

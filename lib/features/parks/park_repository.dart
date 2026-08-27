@@ -9,6 +9,7 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
+import 'package:recordo/features/parks/sync_rules.dart';
 
 export 'package:recordo/features/parks/catalog_cache.dart' show CatalogSyncResult;
 
@@ -29,6 +30,7 @@ class ParkRepository {
 
   List<Park>? _catalog;
   int _catalogVersion = 0;
+  DateTime? _pricesUpdatedAt;
   bool _fromCloud = false;
 
   int get catalogVersion => _catalogVersion;
@@ -43,6 +45,7 @@ class ParkRepository {
     if (snap != null && snap.parks.isNotEmpty) {
       _catalog = snap.parks;
       _catalogVersion = snap.version;
+      _pricesUpdatedAt = snap.pricesUpdatedAt;
       _fromCloud = snap.version > 0;
       return;
     }
@@ -56,46 +59,126 @@ class ParkRepository {
     await syncIfRemoteNewer();
   }
 
-  /// Tiny version check; one dump only when cloud is newer (or empty local).
+  /// Tiny version check; full dump only when the park list changed.
+  /// Price-only updates patch rows via `prices_updated_at`.
   Future<CatalogSyncResult> syncIfRemoteNewer({bool force = false}) async {
     try {
-      final remoteVer = await _remote.fetchCatalogVersion();
-      if (remoteVer == null) return CatalogSyncResult.offline;
+      final meta = await _remote.fetchCatalogMeta();
+      if (meta == null) {
+        await _outbox.flush(_remote);
+        return CatalogSyncResult.offline;
+      }
       final localCount = _catalog?.length ?? 0;
-      final need = force ||
+      final needDump = force ||
           catalogNeedsDump(
             localVersion: _catalogVersion,
-            remoteVersion: remoteVer,
+            remoteVersion: meta.version,
             localCount: localCount,
           );
-      if (!need) {
+      if (needDump) {
+        final dump = await _remote.fetchCatalogDump();
+        if (dump == null || dump.parks.isEmpty) {
+          await _outbox.flush(_remote);
+          return localCount > 0
+              ? CatalogSyncResult.unchanged
+              : CatalogSyncResult.offline;
+        }
+        _catalog = dump.parks;
+        _catalogVersion = dump.version == 0 ? meta.version : dump.version;
+        _pricesUpdatedAt = meta.pricesUpdatedAt ?? dump.pricesUpdatedAt;
+        _fromCloud = true;
+        await _persistSnapshot();
+        await _remapAndPruneOverlay();
         await _outbox.flush(_remote);
-        return CatalogSyncResult.unchanged;
+        return CatalogSyncResult.updated;
       }
 
-      final dump = await _remote.fetchCatalogDump();
-      if (dump == null || dump.parks.isEmpty) {
+      if (catalogNeedsPricePatch(
+        localPricesAt: _pricesUpdatedAt,
+        remotePricesAt: meta.pricesUpdatedAt,
+      )) {
+        final patch = await _remote.fetchPricePatch(since: _pricesUpdatedAt);
+        if (patch.isNotEmpty) {
+          _mergePricePatch(patch);
+        }
+        _pricesUpdatedAt = meta.pricesUpdatedAt;
+        await _persistSnapshot();
+        await _remapAndPruneOverlay();
         await _outbox.flush(_remote);
-        return localCount > 0
+        return patch.isEmpty
             ? CatalogSyncResult.unchanged
-            : CatalogSyncResult.offline;
+            : CatalogSyncResult.updated;
       }
-      _catalog = dump.parks;
-      _catalogVersion = dump.version == 0 ? remoteVer : dump.version;
-      _fromCloud = true;
-      await _cache.write(
-        CatalogDump(
-          version: _catalogVersion,
-          parks: dump.parks,
-          parkCount: dump.parks.length,
-          updatedAt: dump.updatedAt ?? DateTime.now().toUtc(),
-        ),
-      );
+
       await _outbox.flush(_remote);
-      return CatalogSyncResult.updated;
+      return CatalogSyncResult.unchanged;
     } catch (_) {
       return CatalogSyncResult.offline;
     }
+  }
+
+  Future<void> _persistSnapshot() async {
+    final parks = _catalog ?? const <Park>[];
+    await _cache.write(
+      CatalogDump(
+        version: _catalogVersion,
+        parks: parks,
+        parkCount: parks.length,
+        pricesUpdatedAt: _pricesUpdatedAt,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  void _mergePricePatch(List<Park> patch) {
+    final byId = {for (final p in _catalog ?? const <Park>[]) p.id: p};
+    for (final n in patch) {
+      final old = byId[n.id];
+      if (old == null) {
+        byId[n.id] = n;
+        continue;
+      }
+      byId[n.id] = old.copyWith(
+        hourlyHkd: n.hourlyHkd,
+        dailyHkd: n.dailyHkd,
+        nightHkd: n.nightHkd,
+        ugcConfirms: n.ugcConfirms,
+        priceUpdatedAt: n.priceUpdatedAt,
+        priceNote: n.priceNote,
+        source: n.source,
+      );
+    }
+    _catalog = byId.values.toList();
+  }
+
+  Future<void> _remapAndPruneOverlay() async {
+    final catalog = _catalog ?? const <Park>[];
+    final byId = {for (final p in catalog) p.id: p};
+    final seeds = {for (final s in hkSeedParks) s.id: s};
+    final map = Map<String, dynamic>.from(
+      Bootstrap.store.getJsonMap(StorageKeys.ugcPrices) ?? {},
+    );
+    if (map.isEmpty) return;
+    final next = <String, dynamic>{};
+    for (final e in map.entries) {
+      if (e.value is! Map) continue;
+      final local = Map<String, dynamic>.from(e.value as Map);
+      final id = remapLocalParkId(
+            localId: e.key,
+            seed: seeds[e.key],
+            catalog: catalog,
+          ) ??
+          e.key;
+      final dumpPark = byId[id];
+      if (dumpPark != null) {
+        final localTs = DateTime.tryParse('${local['priceUpdatedAt'] ?? ''}');
+        if (!overlayWins(localTs: localTs, dumpTs: dumpPark.priceUpdatedAt)) {
+          continue;
+        }
+      }
+      next[id] = local;
+    }
+    await Bootstrap.store.setJson(StorageKeys.ugcPrices, next);
   }
 
   Future<void> refreshRemote() async {
@@ -219,20 +302,23 @@ class ParkRepository {
 
     if (localRaw is Map) {
       final m = Map<String, dynamic>.from(localRaw);
-      hourly = PriceGuard.clampHourly(
-            (m['hourlyHkd'] as num?)?.toDouble()) ??
-          hourly;
-      daily =
-          PriceGuard.clampDaily((m['dailyHkd'] as num?)?.toDouble()) ?? daily;
-      night =
-          PriceGuard.clampNight((m['nightHkd'] as num?)?.toDouble()) ?? night;
-      confirms = m['ugcConfirms'] as int? ?? confirms;
-      updated = m['priceUpdatedAt'] != null
-          ? DateTime.tryParse(m['priceUpdatedAt'] as String) ?? updated
-          : updated;
-      final n = m['priceNote'] as String?;
-      if (n != null && n.trim().isNotEmpty) priceNote = n.trim();
-      source = p.source.startsWith('ugc') ? p.source : 'ugc';
+      final localTs = m['priceUpdatedAt'] != null
+          ? DateTime.tryParse(m['priceUpdatedAt'] as String)
+          : null;
+      if (overlayWins(localTs: localTs, dumpTs: p.priceUpdatedAt)) {
+        hourly = PriceGuard.clampHourly(
+              (m['hourlyHkd'] as num?)?.toDouble()) ??
+            hourly;
+        daily =
+            PriceGuard.clampDaily((m['dailyHkd'] as num?)?.toDouble()) ?? daily;
+        night =
+            PriceGuard.clampNight((m['nightHkd'] as num?)?.toDouble()) ?? night;
+        confirms = m['ugcConfirms'] as int? ?? confirms;
+        updated = localTs ?? updated;
+        final n = m['priceNote'] as String?;
+        if (n != null && n.trim().isNotEmpty) priceNote = n.trim();
+        source = p.source.startsWith('ugc') ? p.source : 'ugc';
+      }
     }
 
     return p.copyWith(
