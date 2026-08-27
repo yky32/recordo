@@ -83,25 +83,40 @@ class ParkDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = ThemeController.instance.isDark;
+    final fill = dark ? const Color(0xF21C1C1E) : Colors.white;
+    final fg = dark ? Colors.white : const Color(0xFF111111);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        width: 28,
-        height: 28,
+        width: 32,
+        height: 32,
         child: Center(
           child: Container(
-            width: 8,
-            height: 8,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dark
-                  ? Colors.white.withValues(alpha: 0.55)
-                  : const Color(0xFF111111).withValues(alpha: 0.45),
+              color: fill,
+              borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: dark ? const Color(0xCC000000) : Colors.white,
-                width: 1,
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.82)
+                    : const Color(0xFF111111),
+                width: 1.25,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: dark ? 0.45 : 0.22),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.local_parking_rounded,
+              size: 15,
+              color: fg,
             ),
           ),
         ),

@@ -394,8 +394,8 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       final selected = p.id == widget.selectedId;
       final marker = Marker(
         point: LatLng(p.lat, p.lng),
-        width: selected ? 160 : (p.hasPrice ? 72 : 28),
-        height: selected ? 78 : (p.hasPrice ? 36 : 28),
+        width: selected ? 160 : (p.hasPrice ? 72 : 32),
+        height: selected ? 78 : (p.hasPrice ? 36 : 32),
         alignment: p.hasPrice || selected ? Alignment.bottomCenter : Alignment.center,
         child: selected || p.hasPrice
             ? ParkPriceChip(
