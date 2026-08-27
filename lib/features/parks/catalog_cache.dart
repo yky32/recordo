@@ -11,17 +11,20 @@ class CatalogDump {
     required this.parks,
     this.parkCount,
     this.updatedAt,
+    this.pricesUpdatedAt,
   });
 
   final int version;
   final List<Park> parks;
   final int? parkCount;
   final DateTime? updatedAt;
+  final DateTime? pricesUpdatedAt;
 
   Map<String, dynamic> toJson() => {
         'version': version,
         'parkCount': parkCount ?? parks.length,
         'updatedAt': updatedAt?.toUtc().toIso8601String(),
+        'pricesUpdatedAt': pricesUpdatedAt?.toUtc().toIso8601String(),
         'parks': parks.map((p) => p.toJson()).toList(),
       };
 
@@ -50,8 +53,17 @@ class CatalogDump {
       updatedAt: m['updatedAt'] != null
           ? DateTime.tryParse(m['updatedAt'].toString())
           : null,
+      pricesUpdatedAt: m['pricesUpdatedAt'] != null
+          ? DateTime.tryParse(m['pricesUpdatedAt'].toString())
+          : null,
     );
   }
+}
+
+class CatalogMeta {
+  const CatalogMeta({required this.version, this.pricesUpdatedAt});
+  final int version;
+  final DateTime? pricesUpdatedAt;
 }
 
 enum CatalogSyncResult { offline, unchanged, updated }

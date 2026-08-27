@@ -4,20 +4,30 @@ import 'package:recordo/features/parks/park.dart';
 
 /// Cloud catalog + UGC writes. Safe no-op if not configured / offline.
 class SupabaseParkRemote {
-  Future<int?> fetchCatalogVersion() async {
+  Future<CatalogMeta?> fetchCatalogMeta() async {
     final c = RecordoSupabase.client;
     if (c == null) return null;
     try {
       final row = await c
           .from('catalog_meta')
-          .select('version')
+          .select('version,prices_updated_at')
           .eq('id', 1)
           .maybeSingle();
       if (row == null) return null;
-      return jsonInt(row['version']);
+      final pricesRaw = row['prices_updated_at'];
+      return CatalogMeta(
+        version: jsonInt(row['version']),
+        pricesUpdatedAt: pricesRaw != null
+            ? DateTime.tryParse(pricesRaw.toString())
+            : null,
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  Future<int?> fetchCatalogVersion() async {
+    return (await fetchCatalogMeta())?.version;
   }
 
   /// Single dump of the full catalog. Falls back to paged `parks` select.
@@ -30,6 +40,40 @@ class SupabaseParkRemote {
       if (dump != null && dump.parks.isNotEmpty) return dump;
     } catch (_) {}
     return _fetchCatalogPaged();
+  }
+
+  /// Parks whose price_updated_at is after [since] (inclusive pad 1s).
+  Future<List<Park>> fetchPricePatch({DateTime? since}) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return const [];
+    try {
+      const page = 1000;
+      final parks = <Park>[];
+      var from = 0;
+      while (true) {
+        var q = c
+            .from('parks')
+            .select(
+              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source',
+            )
+            .not('price_updated_at', 'is', null);
+        if (since != null) {
+          q = q.gt('price_updated_at', since.toUtc().toIso8601String());
+        }
+        final rows = await q.order('id').range(from, from + page - 1);
+        final list = (rows as List)
+            .whereType<Map>()
+            .map((e) => Park.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        parks.addAll(list);
+        if (list.length < page) break;
+        from += page;
+        if (from > 20000) break;
+      }
+      return parks;
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<CatalogDump?> _fetchCatalogPaged() async {

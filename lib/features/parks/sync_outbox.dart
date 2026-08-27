@@ -5,6 +5,7 @@ import 'package:recordo/features/parks/supabase_park_remote.dart';
 
 const kSyncOutboxMax = 80;
 const kResumeSyncMin = Duration(seconds: 30);
+const kOutboxMaxTries = 8;
 
 bool resumeShouldSync(DateTime? last, DateTime now) {
   if (last == null) return true;
@@ -17,6 +18,7 @@ class SyncJob {
     required this.type,
     required this.payload,
     required this.createdAt,
+    this.tries = 0,
   });
 
   /// `price` or `park`.
@@ -24,12 +26,24 @@ class SyncJob {
   final String type;
   final Map<String, dynamic> payload;
   final DateTime createdAt;
+  final int tries;
+
+  SyncJob copyWith({int? tries}) {
+    return SyncJob(
+      id: id,
+      type: type,
+      payload: payload,
+      createdAt: createdAt,
+      tries: tries ?? this.tries,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'type': type,
         'payload': payload,
         'createdAt': createdAt.toUtc().toIso8601String(),
+        'tries': tries,
       };
 
   factory SyncJob.fromJson(Map<String, dynamic> m) {
@@ -39,6 +53,7 @@ class SyncJob {
       type: m['type'] as String? ?? 'price',
       payload: raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{},
       createdAt: DateTime.tryParse('${m['createdAt'] ?? ''}') ?? DateTime.now(),
+      tries: jsonInt(m['tries']),
     );
   }
 }
@@ -51,6 +66,24 @@ List<SyncJob> enqueueJob(
   final next = [...queue, job];
   if (next.length <= max) return next;
   return next.sublist(next.length - max);
+}
+
+bool outboxJobPoison(SyncJob job) {
+  if (job.type == 'price') {
+    return '${job.payload['parkId'] ?? ''}'.trim().isEmpty;
+  }
+  if (job.type == 'park') {
+    return '${job.payload['id'] ?? ''}'.trim().isEmpty;
+  }
+  return true;
+}
+
+/// null = drop the job.
+SyncJob? outboxAfterFailure(SyncJob job, {int maxTries = kOutboxMaxTries}) {
+  if (outboxJobPoison(job)) return null;
+  final next = job.tries + 1;
+  if (next >= maxTries) return null;
+  return job.copyWith(tries: next);
 }
 
 class SyncOutbox {
@@ -80,11 +113,13 @@ class SyncOutbox {
     final kept = <SyncJob>[];
     var sent = 0;
     for (final job in jobs) {
+      if (outboxJobPoison(job)) continue;
       final ok = await _send(remote, job);
       if (ok) {
         sent++;
       } else {
-        kept.add(job);
+        final retry = outboxAfterFailure(job);
+        if (retry != null) kept.add(retry);
       }
     }
     await _write(kept);

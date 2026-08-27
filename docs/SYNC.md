@@ -28,12 +28,12 @@ Phone  ───┤               ├──►  Supabase (SoT)
 ## Pull (server → phone)
 
 1. Paint **local snapshot** immediately.
-2. `GET catalog_meta.version` (tiny).
-3. Dump **only if** `remoteVersion > localVersion` **or** local catalog is empty.
-4. `POST /rpc/catalog_dump` → overwrite `parks_v1.json`.
-5. Overlay still applies **this device’s** newer local prices on top.
+2. `GET catalog_meta` (`version` + `prices_updated_at`).
+3. **List changed** (`version` newer or local empty) → `catalog_dump` overwrite.
+4. **Only prices changed** → patch rows with `price_updated_at > local`.
+5. Overlay applies **only if this device’s write is newer than dump**.
 
-No dump when versions match.  
+No full dump when only a price report landed.  
 No resume spam: throttle **≥ 30s**.
 
 ## Push (phone → server)
@@ -45,7 +45,8 @@ Always write local first, then enqueue outbox, then flush:
 3. If online: insert `price_reports` / `parks_ugc`. Success → drop job.
 4. If offline / fail: job stays. Next pull / resume / manual sync flushes again.
 
-Cap: last **80** jobs. FIFO drop oldest.
+Cap: last **80** jobs. FIFO drop oldest.  
+Poison / 8 failed tries → drop (no infinite retry).
 
 ## When sync runs
 
@@ -58,12 +59,13 @@ Cap: last **80** jobs. FIFO drop oldest.
 
 ## Conflict
 
-- Shared list/detail after a dump: **server median** on `parks` (P0 trust).
-- This device, before dump includes our write: **local overlay if newer timestamp**.
+- Shared list/detail after dump/patch: **server median** on `parks`.
+- This device overlay wins **only while** `localTs > dumpTs`. After the cloud row is as new or newer, overlay is pruned.
+- Seed-id overlay keys remap onto OSM catalog ids (~90m) after dump.
 - Not last-write-wins across users.
 
 ## Not in v1
 
-- Incremental `updated_at` patch (full dump is ~0.8MB, rare).
+- Incremental `updated_at` patch — **prices now patch**; full dump still for new parks / list changes.
 - Realtime websocket.
 - Syncing parking sessions.
