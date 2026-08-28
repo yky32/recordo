@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
+import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
@@ -480,6 +481,13 @@ class ParkRepository {
     );
     await _outbox.flush(_remote);
     return !_outbox.read().any((j) => j.id == jobId);
+  }
+
+  Future<List<CommunityPaidSession>> fetchCommunityPaidSessions(
+    String parkId, {
+    int limit = 8,
+  }) {
+    return _remote.fetchPaidSessions(parkId, limit: limit);
   }
 
   Future<Park> reportNewPark({

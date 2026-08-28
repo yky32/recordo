@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
@@ -270,6 +271,13 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       durationMinutes: durationMinutes,
     );
     return cloud;
+  }
+
+  Future<List<CommunityPaidSession>> communityPaidForPark(
+    String parkId, {
+    int limit = 8,
+  }) {
+    return _repo.fetchCommunityPaidSessions(parkId, limit: limit);
   }
 
   /// Check cloud version; dump only if newer.

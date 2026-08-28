@@ -6,7 +6,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
+import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
@@ -479,10 +481,37 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   }
 }
 
-/// Recent real payments from local session history (this device).
-class _PaidHistoryCard extends StatelessWidget {
+/// Recent real payments — community (cloud) + local session history.
+class _PaidHistoryCard extends StatefulWidget {
   const _PaidHistoryCard({required this.parkId});
   final String parkId;
+
+  @override
+  State<_PaidHistoryCard> createState() => _PaidHistoryCardState();
+}
+
+class _PaidHistoryCardState extends State<_PaidHistoryCard> {
+  List<CommunityPaidSession>? _community;
+  bool _loadingCommunity = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCommunity();
+  }
+
+  Future<void> _loadCommunity() async {
+    if (!RecordoSupabase.isReady) return;
+    setState(() => _loadingCommunity = true);
+    final rows = await context
+        .read<ParkCatalogCubit>()
+        .communityPaidForPark(widget.parkId);
+    if (!mounted) return;
+    setState(() {
+      _community = rows;
+      _loadingCommunity = false;
+    });
+  }
 
   String _fmtDur(Duration d) {
     final h = d.inHours;
@@ -502,8 +531,12 @@ class _PaidHistoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SessionCubit, SessionState>(
       builder: (context, session) {
-        final paid =
-            context.read<SessionCubit>().paidSessionsForPark(parkId);
+        final local =
+            context.read<SessionCubit>().paidSessionsForPark(widget.parkId);
+        final community = _community ?? const <CommunityPaidSession>[];
+        final hasCommunity = community.isNotEmpty;
+        final hasLocal = local.isNotEmpty;
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
@@ -516,29 +549,60 @@ class _PaidHistoryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('最近實付', style: RType.label()),
+              if (RecordoSupabase.isReady && hasCommunity) ...[
+                const SizedBox(height: 4),
+                Text('其他司機分享', style: RType.muted()),
+              ],
               const SizedBox(height: 6),
-              if (paid.isEmpty)
+              if (_loadingCommunity && !hasCommunity && !hasLocal)
+                Text('載入中…', style: RType.muted())
+              else if (!hasCommunity && !hasLocal)
                 Text(
                   '未有實付 · 泊完填收費就會出現',
                   style: RType.muted(),
                 )
               else ...[
-                for (var i = 0; i < paid.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'HK\$${paid[i].amountHkd!.toStringAsFixed(0)} · ${_fmtDur(paid[i].elapsed)}',
-                          style: RType.body(),
+                if (hasCommunity)
+                  for (var i = 0; i < community.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'HK\$${community[i].amountHkd.toStringAsFixed(0)} · ${_fmtDur(community[i].duration)}',
+                            style: RType.body(),
+                          ),
                         ),
-                      ),
-                      Text(
-                        _fmtWhen(paid[i].endedAt!),
-                        style: RType.muted(),
-                      ),
-                    ],
-                  ),
+                        Text(
+                          _fmtWhen(community[i].createdAt),
+                          style: RType.muted(),
+                        ),
+                      ],
+                    ),
+                  ],
+                if (hasLocal) ...[
+                  if (hasCommunity) ...[
+                    const SizedBox(height: 12),
+                    Text('本機', style: RType.muted()),
+                    const SizedBox(height: 6),
+                  ],
+                  for (var i = 0; i < local.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'HK\$${local[i].amountHkd!.toStringAsFixed(0)} · ${_fmtDur(local[i].elapsed)}',
+                            style: RType.body(),
+                          ),
+                        ),
+                        Text(
+                          _fmtWhen(local[i].endedAt!),
+                          style: RType.muted(),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ],
             ],
