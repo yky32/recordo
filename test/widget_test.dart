@@ -9,6 +9,7 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/parks/sync_rules.dart';
 import 'package:recordo/features/session/parking_session.dart';
+import 'package:recordo/features/session/session_alarm_service.dart';
 
 void main() {
   test('seed parks cover HK with enough samples', () {
@@ -35,6 +36,21 @@ void main() {
     );
     expect(s.elapsed.inMinutes, 90);
     expect(s.isActive, isFalse);
+  });
+
+  test('parking alarm copy mentions parked time and fee', () {
+    expect(formatAlarmDuration(const Duration(hours: 2)), '2 小時');
+    expect(
+      formatAlarmDuration(const Duration(hours: 1, minutes: 30)),
+      '1 小時 30 分',
+    );
+    expect(
+      parkingAlarmBody(
+        parkedFor: const Duration(hours: 2),
+        estimatedFee: 64,
+      ),
+      '已泊約 2 小時 · 預估 HK\$64 · 決定走定繼續',
+    );
   });
 
   test('outbox keeps last 80 jobs', () {
