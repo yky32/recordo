@@ -4,6 +4,7 @@ import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
 import 'package:recordo/features/session/remind_log_service.dart';
 import 'package:recordo/features/session/parking_session.dart';
+import 'package:recordo/features/session/session_alarm_service.dart';
 import 'package:uuid/uuid.dart';
 
 class SessionState {
@@ -56,9 +57,10 @@ class SessionCubit extends Cubit<SessionState> {
         activeRaw == null ? null : ParkingSession.fromJson(activeRaw);
     emit(SessionState(active: active, history: list));
 
-    // Restore Live Activity if session still active
     if (active != null) {
       LiveActivityService.instance.startForSession(active);
+    } else {
+      SessionAlarmService.instance.cancel();
     }
   }
 
@@ -110,6 +112,7 @@ class SessionCubit extends Cubit<SessionState> {
     emit(SessionState(active: null, history: history));
     await LiveActivityService.instance.end();
     await RemindLogService.instance.cancel();
+    await SessionAlarmService.instance.cancelIfSession(a.id);
   }
 
   /// Completed sessions for a park with amount (newest first).

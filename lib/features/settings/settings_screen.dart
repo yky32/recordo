@@ -218,11 +218,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (!context.mounted) return;
                   if (v) {
                     await RemindLogService.instance.init();
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('已開 · 泊車後會提醒你填收費')),
                     );
                   } else {
                     await RemindLogService.instance.cancel();
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('已關閉提醒')),
                     );

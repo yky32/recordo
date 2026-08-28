@@ -12,6 +12,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
+import 'package:recordo/features/session/session_alarm_service.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
 /// Full-screen live parking timer — duration + estimated fee.
@@ -233,6 +234,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      _SessionAlarmCard(
+                        sessionId: active.id,
+                        startedAt: started,
+                        parkName: name,
+                        hourlyHkd: hourly,
+                      ),
                             const Spacer(flex: 3),
                           ],
                         ),
@@ -272,6 +280,161 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _SessionAlarmCard extends StatefulWidget {
+  const _SessionAlarmCard({
+    required this.sessionId,
+    required this.startedAt,
+    required this.parkName,
+    this.hourlyHkd,
+  });
+
+  final String sessionId;
+  final DateTime startedAt;
+  final String parkName;
+  final double? hourlyHkd;
+
+  @override
+  State<_SessionAlarmCard> createState() => _SessionAlarmCardState();
+}
+
+class _SessionAlarmCardState extends State<_SessionAlarmCard> {
+  static const _presets = <(Duration, String)>[
+    (Duration(minutes: 30), '30分'),
+    (Duration(hours: 1), '1小時'),
+    (Duration(hours: 2), '2小時'),
+    (Duration(hours: 3), '3小時'),
+  ];
+
+  bool _busy = false;
+
+  DateTime? get _when {
+    final at = SessionAlarmService.instance.scheduledAt;
+    if (at == null) return null;
+    if (SessionAlarmService.instance.scheduledSessionId != widget.sessionId) {
+      return null;
+    }
+    if (at.isBefore(DateTime.now())) return null;
+    return at;
+  }
+
+  String _hhmm(DateTime t) {
+    final l = t.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _set(Duration after) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ok = await SessionAlarmService.instance.schedule(
+      sessionId: widget.sessionId,
+      startedAt: widget.startedAt,
+      after: after,
+      hourlyHkd: widget.hourlyHkd,
+      parkName: widget.parkName,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('開通知權限先用到鬧鐘')),
+      );
+    }
+  }
+
+  Future<void> _clear() async {
+    await SessionAlarmService.instance.cancel();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final when = _when;
+    final until = when?.difference(widget.startedAt);
+    final fee = until == null
+        ? null
+        : estimateParkingFee(until, widget.hourlyHkd);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: UberColors.elevated,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: UberColors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('鬧鐘提醒', style: RType.body()),
+          const SizedBox(height: 4),
+          Text(
+            '時間到會响 · 睇下泊咗幾耐、大約幾錢',
+            style: RType.muted(),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final p in _presets)
+                _chip(
+                  label: p.$2,
+                  selected: when != null &&
+                      (when.difference(DateTime.now()) - p.$1)
+                              .inSeconds
+                              .abs() <
+                          90,
+                  onTap: _busy ? null : () => _set(p.$1),
+                ),
+            ],
+          ),
+          if (when != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              fee == null
+                  ? '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)}'
+                  : '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)} · 預估 HK\$${fee.round()}',
+              style: RType.muted(),
+            ),
+            TextButton(
+              onPressed: _busy ? null : _clear,
+              child: Text('取消鬧鐘', style: RType.body()),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _chip({
+    required String label,
+    required bool selected,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? UberColors.accent.withValues(alpha: 0.18)
+              : UberColors.sheet,
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: selected ? UberColors.accent : UberColors.hairline,
+          ),
+        ),
+        child: Text(
+          label,
+          style: RType.label().copyWith(
+            color: selected ? UberColors.accent : UberColors.white,
+          ),
+        ),
+      ),
     );
   }
 }

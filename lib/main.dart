@@ -7,6 +7,7 @@ import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
 import 'package:recordo/features/session/remind_log_service.dart';
+import 'package:recordo/features/session/session_alarm_service.dart';
 import 'package:recordo/features/parks/catalog_lifecycle.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -25,6 +26,7 @@ Future<void> main() async {
     await RecordoSupabase.init();
     await LiveActivityService.instance.init();
     await RemindLogService.instance.init();
+    await SessionAlarmService.instance.init();
     _syncSystemUi();
     ThemeController.instance.addListener(_syncSystemUi);
 
