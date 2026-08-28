@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
-import 'package:recordo/core/bootstrap.dart';
-import 'package:recordo/core/storage/local_store.dart';
+import 'package:recordo/features/settings/settings_cubit.dart';
 
 /// One-time explainer for the CWB/TST launch wedge (Phase A).
 Future<void> showWedgeExplainerIfNeeded(BuildContext context) async {
-  final seen = Bootstrap.store.getString(StorageKeys.wedgeExplained);
-  if (seen == '1') return;
+  final settings = context.read<SettingsCubit>();
+  if (settings.state.wedgeExplained) return;
   if (!context.mounted) return;
 
   await showDialog<void>(
@@ -29,5 +29,5 @@ Future<void> showWedgeExplainerIfNeeded(BuildContext context) async {
     ),
   );
 
-  await Bootstrap.store.setString(StorageKeys.wedgeExplained, '1');
+  await settings.markWedgeExplained();
 }

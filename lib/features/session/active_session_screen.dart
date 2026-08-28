@@ -284,7 +284,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 }
 
-class _SessionAlarmCard extends StatefulWidget {
+class _SessionAlarmCard extends StatelessWidget {
   const _SessionAlarmCard({
     required this.sessionId,
     required this.startedAt,
@@ -297,11 +297,6 @@ class _SessionAlarmCard extends StatefulWidget {
   final String parkName;
   final double? hourlyHkd;
 
-  @override
-  State<_SessionAlarmCard> createState() => _SessionAlarmCardState();
-}
-
-class _SessionAlarmCardState extends State<_SessionAlarmCard> {
   static const _presets = <(Duration, String)>[
     (Duration(minutes: 30), '30分'),
     (Duration(hours: 1), '1小時'),
@@ -309,104 +304,96 @@ class _SessionAlarmCardState extends State<_SessionAlarmCard> {
     (Duration(hours: 3), '3小時'),
   ];
 
-  bool _busy = false;
-
-  DateTime? get _when {
-    final at = SessionAlarmService.instance.scheduledAt;
-    if (at == null) return null;
-    if (SessionAlarmService.instance.scheduledSessionId != widget.sessionId) {
-      return null;
-    }
-    if (at.isBefore(DateTime.now())) return null;
-    return at;
-  }
-
   String _hhmm(DateTime t) {
     final l = t.toLocal();
     return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _set(Duration after) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final ok = await SessionAlarmService.instance.schedule(
-      sessionId: widget.sessionId,
-      startedAt: widget.startedAt,
-      after: after,
-      hourlyHkd: widget.hourlyHkd,
-      parkName: widget.parkName,
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('開通知權限先用到鬧鐘')),
-      );
-    }
-  }
-
-  Future<void> _clear() async {
-    await SessionAlarmService.instance.cancel();
-    if (mounted) setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
-    final when = _when;
-    final until = when?.difference(widget.startedAt);
-    final fee = until == null
-        ? null
-        : estimateParkingFee(until, widget.hourlyHkd);
+    return BlocBuilder<SessionCubit, SessionState>(
+      buildWhen: (prev, next) =>
+          prev.alarmAt != next.alarmAt ||
+          prev.alarmSessionId != next.alarmSessionId ||
+          prev.alarmBusy != next.alarmBusy,
+      builder: (context, state) {
+        final when = state.alarmFor(sessionId);
+        final busy = state.alarmBusy;
+        final until = when?.difference(startedAt);
+        final fee =
+            until == null ? null : estimateParkingFee(until, hourlyHkd);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      decoration: BoxDecoration(
-        color: UberColors.elevated,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: UberColors.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('鬧鐘提醒', style: RType.body()),
-          const SizedBox(height: 4),
-          Text(
-            '時間到會响 · 睇下泊咗幾耐、大約幾錢',
-            style: RType.muted(),
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          decoration: BoxDecoration(
+            color: UberColors.elevated,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: UberColors.hairline),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final p in _presets)
-                _chip(
-                  label: p.$2,
-                  selected: when != null &&
-                      (when.difference(DateTime.now()) - p.$1)
-                              .inSeconds
-                              .abs() <
-                          90,
-                  onTap: _busy ? null : () => _set(p.$1),
+              Text('鬧鐘提醒', style: RType.body()),
+              const SizedBox(height: 4),
+              Text(
+                '時間到會响 · 睇下泊咗幾耐、大約幾錢',
+                style: RType.muted(),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final p in _presets)
+                    _chip(
+                      label: p.$2,
+                      selected: when != null &&
+                          (when.difference(DateTime.now()) - p.$1)
+                                  .inSeconds
+                                  .abs() <
+                              90,
+                      onTap: busy
+                          ? null
+                          : () async {
+                              final ok = await context
+                                  .read<SessionCubit>()
+                                  .scheduleAlarm(
+                                    after: p.$1,
+                                    hourlyHkd: hourlyHkd,
+                                    parkName: parkName,
+                                  );
+                              if (!context.mounted) return;
+                              if (!ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('開通知權限先用到鬧鐘'),
+                                  ),
+                                );
+                              }
+                            },
+                    ),
+                ],
+              ),
+              if (when != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  fee == null
+                      ? '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)}'
+                      : '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)} · 預估 HK\$${fee.round()}',
+                  style: RType.muted(),
                 ),
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => context.read<SessionCubit>().cancelAlarm(),
+                  child: Text('取消鬧鐘', style: RType.body()),
+                ),
+              ],
             ],
           ),
-          if (when != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              fee == null
-                  ? '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)}'
-                  : '會喺 ${_hhmm(when)} 响 · 到時約泊 ${formatAlarmDuration(until!)} · 預估 HK\$${fee.round()}',
-              style: RType.muted(),
-            ),
-            TextButton(
-              onPressed: _busy ? null : _clear,
-              child: Text('取消鬧鐘', style: RType.body()),
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 

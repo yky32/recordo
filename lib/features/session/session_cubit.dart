@@ -11,10 +11,16 @@ class SessionState {
   const SessionState({
     this.active,
     this.history = const [],
+    this.alarmAt,
+    this.alarmSessionId,
+    this.alarmBusy = false,
   });
 
   final ParkingSession? active;
   final List<ParkingSession> history;
+  final DateTime? alarmAt;
+  final String? alarmSessionId;
+  final bool alarmBusy;
 
   double get monthTotal {
     final now = DateTime.now();
@@ -29,14 +35,29 @@ class SessionState {
         .fold<double>(0, (a, b) => a + (b.amountHkd ?? 0));
   }
 
+  /// Scheduled alarm for [sessionId], or null if none / expired / other session.
+  DateTime? alarmFor(String sessionId) {
+    if (alarmSessionId != sessionId || alarmAt == null) return null;
+    if (alarmAt!.isBefore(DateTime.now())) return null;
+    return alarmAt;
+  }
+
   SessionState copyWith({
     ParkingSession? active,
     List<ParkingSession>? history,
+    DateTime? alarmAt,
+    String? alarmSessionId,
+    bool? alarmBusy,
     bool clearActive = false,
+    bool clearAlarm = false,
   }) {
     return SessionState(
       active: clearActive ? null : (active ?? this.active),
       history: history ?? this.history,
+      alarmAt: clearAlarm ? null : (alarmAt ?? this.alarmAt),
+      alarmSessionId:
+          clearAlarm ? null : (alarmSessionId ?? this.alarmSessionId),
+      alarmBusy: alarmBusy ?? this.alarmBusy,
     );
   }
 }
@@ -45,6 +66,15 @@ class SessionCubit extends Cubit<SessionState> {
   SessionCubit() : super(const SessionState());
 
   final _uuid = const Uuid();
+
+  void _emitAlarmFromStore() {
+    emit(
+      state.copyWith(
+        alarmAt: SessionAlarmService.instance.scheduledAt,
+        alarmSessionId: SessionAlarmService.instance.scheduledSessionId,
+      ),
+    );
+  }
 
   void hydrate() {
     final list = Bootstrap.store
@@ -55,7 +85,14 @@ class SessionCubit extends Cubit<SessionState> {
     final activeRaw = Bootstrap.store.getJsonMap(StorageKeys.activeSession);
     final active =
         activeRaw == null ? null : ParkingSession.fromJson(activeRaw);
-    emit(SessionState(active: active, history: list));
+    emit(
+      SessionState(
+        active: active,
+        history: list,
+        alarmAt: SessionAlarmService.instance.scheduledAt,
+        alarmSessionId: SessionAlarmService.instance.scheduledSessionId,
+      ),
+    );
 
     if (active != null) {
       LiveActivityService.instance.startForSession(active);
@@ -109,10 +146,45 @@ class SessionCubit extends Cubit<SessionState> {
       history.map((e) => e.toJson()).toList(),
     );
     await Bootstrap.store.remove(StorageKeys.activeSession);
-    emit(SessionState(active: null, history: history));
+    emit(SessionState(history: history));
     await LiveActivityService.instance.end();
     await RemindLogService.instance.cancel();
     await SessionAlarmService.instance.cancelIfSession(a.id);
+    _emitAlarmFromStore();
+  }
+
+  Future<void> clearHistory() async {
+    await Bootstrap.store.remove(StorageKeys.sessions);
+    await Bootstrap.store.remove(StorageKeys.activeSession);
+    await LiveActivityService.instance.end();
+    await RemindLogService.instance.cancel();
+    await SessionAlarmService.instance.cancel();
+    emit(const SessionState());
+  }
+
+  Future<bool> scheduleAlarm({
+    required Duration after,
+    double? hourlyHkd,
+    String? parkName,
+  }) async {
+    final active = state.active;
+    if (active == null) return false;
+    emit(state.copyWith(alarmBusy: true));
+    final ok = await SessionAlarmService.instance.schedule(
+      sessionId: active.id,
+      startedAt: active.startedAt,
+      after: after,
+      hourlyHkd: hourlyHkd,
+      parkName: parkName,
+    );
+    emit(state.copyWith(alarmBusy: false));
+    _emitAlarmFromStore();
+    return ok;
+  }
+
+  Future<void> cancelAlarm() async {
+    await SessionAlarmService.instance.cancel();
+    emit(state.copyWith(clearAlarm: true));
   }
 
   /// Completed sessions for a park with amount (newest first).
@@ -128,6 +200,4 @@ class SessionCubit extends Cubit<SessionState> {
     if (list.length <= limit) return list;
     return list.sublist(0, limit);
   }
-
 }
-
