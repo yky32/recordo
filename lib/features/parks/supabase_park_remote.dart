@@ -170,11 +170,40 @@ class SupabaseParkRemote {
   }) async {
     final c = RecordoSupabase.client;
     if (c == null) return false;
+    if (!await RecordoSupabase.ensureSignedIn()) return false;
     try {
       await c.from('paid_sessions').insert({
         'park_id': parkId,
         'amount_hkd': amountHkd,
         'duration_minutes': durationMinutes,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> insertCohortEvent({
+    required String installId,
+    required String event,
+    String? parkId,
+    double? amountHkd,
+    int? durationMinutes,
+    bool? sharePaid,
+    bool? cloudOk,
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return false;
+    if (!await RecordoSupabase.ensureSignedIn()) return false;
+    try {
+      await c.from('cohort_events').insert({
+        'install_id': installId,
+        'event': event,
+        if (parkId != null && parkId.isNotEmpty) 'park_id': parkId,
+        'amount_hkd': ?amountHkd,
+        'duration_minutes': ?durationMinutes,
+        'share_paid': ?sharePaid,
+        'cloud_ok': ?cloudOk,
       });
       return true;
     } catch (_) {
@@ -216,6 +245,7 @@ class SupabaseParkRemote {
   }) async {
     final c = RecordoSupabase.client;
     if (c == null) return false;
+    if (!await RecordoSupabase.ensureSignedIn()) return false;
     try {
       await c.from('price_reports').insert({
         'park_id': parkId,

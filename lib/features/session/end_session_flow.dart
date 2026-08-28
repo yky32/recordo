@@ -1,6 +1,8 @@
+import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/session/cohort_telemetry.dart';
 import 'package:recordo/features/session/parking_session.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -33,18 +35,34 @@ abstract final class EndSessionFlow {
     );
 
     var snack = '已記低';
+    var cloudOk = false;
     if (sharePaid && park != null && amountHkd > 0) {
-      try {
-        final cloud = await catalogCubit.reportPaidSession(
-          parkId: park.id,
-          amountHkd: amountHkd,
-          durationMinutes: durationMinutes,
-        );
-        snack = ContributionCopy.paidSession(cloud: cloud);
-      } on ArgumentError catch (e) {
-        snack = e.message?.toString() ?? '實付未能分享';
+      if (!RecordoSupabase.isReady) {
+        snack = ContributionCopy.paidSessionOfflineBuild;
+      } else {
+        try {
+          await RecordoSupabase.ensureSignedIn();
+          cloudOk = await catalogCubit.reportPaidSession(
+            parkId: park.id,
+            amountHkd: amountHkd,
+            durationMinutes: durationMinutes,
+          );
+          snack = ContributionCopy.paidSession(cloud: cloudOk);
+        } on ArgumentError catch (e) {
+          snack = e.message?.toString() ?? '實付未能分享';
+        }
       }
     }
+
+    // Fire-and-forget Phase C exit-gate telemetry.
+    // ignore: unawaited_futures
+    CohortTelemetry.sessionEnd(
+      parkId: parkId,
+      amountHkd: amountHkd,
+      durationMinutes: durationMinutes,
+      sharePaid: sharePaid && park != null && amountHkd > 0,
+      cloudOk: cloudOk,
+    );
 
     return EndSessionOutcome(snackMessage: snack, saved: true);
   }

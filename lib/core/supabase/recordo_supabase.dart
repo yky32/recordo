@@ -12,6 +12,11 @@ abstract final class RecordoSupabase {
     return Supabase.instance.client;
   }
 
+  static bool get hasSession {
+    final c = client;
+    return c != null && c.auth.currentSession != null;
+  }
+
   static Future<void> init() async {
     if (!RecordoConfig.supabaseEnabled) {
       _ready = false;
@@ -25,11 +30,19 @@ abstract final class RecordoSupabase {
       ),
     );
     _ready = true;
+    await ensureSignedIn();
+  }
+
+  /// Anonymous auth is required for paid_sessions / price_reports / cohort_events.
+  static Future<bool> ensureSignedIn() async {
+    final c = client;
+    if (c == null) return false;
+    if (c.auth.currentSession != null) return true;
     try {
-      final client = Supabase.instance.client;
-      if (client.auth.currentSession == null) {
-        await client.auth.signInAnonymously();
-      }
-    } catch (_) {}
+      await c.auth.signInAnonymously();
+      return c.auth.currentSession != null;
+    } catch (_) {
+      return false;
+    }
   }
 }
