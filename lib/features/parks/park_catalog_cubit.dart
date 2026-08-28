@@ -1,11 +1,14 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
 
 class ParkCatalogState {
   const ParkCatalogState({
     this.parks = const [],
+    this.restParks = const [],
+    this.showRestParks = false,
     this.selectedId,
     this.loading = true,
     this.userLat,
@@ -19,6 +22,9 @@ class ParkCatalogState {
   });
 
   final List<Park> parks;
+  /// Unpriced / demoted lots collapsed in the home sheet.
+  final List<Park> restParks;
+  final bool showRestParks;
   final String? selectedId;
   final bool loading;
   final double? userLat;
@@ -32,18 +38,29 @@ class ParkCatalogState {
   final int catalogVersion;
   final bool fromCloud;
 
+  bool get isSearching => query.trim().isNotEmpty;
+
+  /// Featured + collapsed remainder — for map pins in the current window.
+  List<Park> get allWindowParks => [...parks, ...restParks];
+
   Park? get selected {
     if (selectedId == null) return null;
     try {
       return parks.firstWhere((e) => e.id == selectedId);
     } catch (_) {
-      // Selected may be outside nearby window — look up raw later if needed
+      if (showRestParks) {
+        try {
+          return restParks.firstWhere((e) => e.id == selectedId);
+        } catch (_) {}
+      }
       return null;
     }
   }
 
   ParkCatalogState copyWith({
     List<Park>? parks,
+    List<Park>? restParks,
+    bool? showRestParks,
     String? selectedId,
     bool? loading,
     double? userLat,
@@ -58,6 +75,8 @@ class ParkCatalogState {
   }) {
     return ParkCatalogState(
       parks: parks ?? this.parks,
+      restParks: restParks ?? this.restParks,
+      showRestParks: showRestParks ?? this.showRestParks,
       selectedId: clearSelected ? null : (selectedId ?? this.selectedId),
       loading: loading ?? this.loading,
       userLat: userLat ?? this.userLat,
@@ -81,15 +100,22 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   void _emitCatalog({bool loading = false}) {
     final all = _repo.allWithUgc();
+    final piped = _pipeline(all);
     emit(
       state.copyWith(
-        parks: _pipeline(all),
+        parks: piped.featured,
+        restParks: piped.rest,
+        showRestParks: false,
         loading: loading,
         totalInDb: all.length,
         catalogVersion: _repo.catalogVersion,
         fromCloud: _repo.playingFromCloudSnapshot,
       ),
     );
+  }
+
+  void toggleRestParks() {
+    emit(state.copyWith(showRestParks: !state.showRestParks));
   }
 
   Future<void> load() async {
@@ -106,42 +132,49 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   void select(String? id) => emit(state.copyWith(selectedId: id));
 
   void setQuery(String q) {
+    final piped = _pipeline(_repo.allWithUgc(), query: q);
     emit(
       state.copyWith(
         query: q,
-        parks: _pipeline(_repo.allWithUgc(), query: q),
+        parks: piped.featured,
+        restParks: piped.rest,
+        showRestParks: q.trim().isNotEmpty,
       ),
     );
   }
 
   void setUserLocation(double lat, double lng) {
+    final piped = _pipeline(
+      _repo.allWithUgc(),
+      pinLat: state.pinLat ?? lat,
+      pinLng: state.pinLng ?? lng,
+    );
     emit(
       state.copyWith(
         userLat: lat,
         userLng: lng,
         pinLat: state.pinLat ?? lat,
         pinLng: state.pinLng ?? lng,
-        parks: _pipeline(
-          _repo.allWithUgc(),
-          pinLat: state.pinLat ?? lat,
-          pinLng: state.pinLng ?? lng,
-        ),
+        parks: piped.featured,
+        restParks: piped.rest,
       ),
     );
   }
 
   /// Called when user drags map — pin stays center, target moves.
   void setPin(double lat, double lng) {
+    final piped = _pipeline(_repo.allWithUgc(), pinLat: lat, pinLng: lng);
     emit(
       state.copyWith(
         pinLat: lat,
         pinLng: lng,
-        parks: _pipeline(_repo.allWithUgc(), pinLat: lat, pinLng: lng),
+        parks: piped.featured,
+        restParks: piped.rest,
       ),
     );
   }
 
-  List<Park> _pipeline(
+  ({List<Park> featured, List<Park> rest}) _pipeline(
     List<Park> raw, {
     double? pinLat,
     double? pinLng,
@@ -161,39 +194,33 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
     final cLat = pinLat ?? state.pinLat ?? state.userLat;
     final cLng = pinLng ?? state.pinLng ?? state.userLng;
-    if (cLat == null || cLng == null) {
-      // No location yet — show named / priced first, cap for perf
-      final prefer = List<Park>.from(list)
-        ..sort((a, b) {
-          final ap = a.hasPrice ? 0 : 1;
-          final bp = b.hasPrice ? 0 : 1;
-          if (ap != bp) return ap.compareTo(bp);
-          final an = a.name == '停車場' ? 1 : 0;
-          final bn = b.name == '停車場' ? 1 : 0;
-          return an.compareTo(bn);
-        });
-      return prefer.take(q.isEmpty ? 80 : 120).toList();
+
+    final sorted = List<Park>.from(list)
+      ..sort(
+        (a, b) => compareParksForDisplay(
+          a,
+          b,
+          centerLat: cLat,
+          centerLng: cLng,
+        ),
+      );
+
+    if (q.isNotEmpty) {
+      return (featured: sorted, rest: const []);
     }
 
-    final scored = list.map((p) {
-      final m = Geolocator.distanceBetween(cLat, cLng, p.lat, p.lng);
-      return (p, m);
-    }).toList()
-      ..sort((a, b) => a.$2.compareTo(b.$2));
+    final cap = 150;
+    var window = sorted.take(cap).toList();
 
-    // Cap markers/list for map performance (full DB still searchable)
-    final cap = q.isEmpty ? 150 : 200;
-    var out = scored.take(cap).map((e) => e.$1).toList();
-
-    // Keep selected in window even if far
     final sel = state.selectedId;
-    if (sel != null && !out.any((p) => p.id == sel)) {
+    if (sel != null && !window.any((p) => p.id == sel)) {
       try {
         final p = raw.firstWhere((e) => e.id == sel);
-        out = [p, ...out];
+        window = [p, ...window];
       } catch (_) {}
     }
-    return out;
+
+    return splitFeaturedRest(window, searching: false);
   }
 
   double? distanceMeters(Park p) {

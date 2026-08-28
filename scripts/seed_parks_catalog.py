@@ -176,13 +176,18 @@ def merge_seed_over_osm(osm: list[dict], seeds: list[dict]) -> list[dict]:
                     "hourlyHkd": s.get("hourlyHkd"),
                     "dailyHkd": s.get("dailyHkd"),
                     "nightHkd": s.get("nightHkd"),
-                    "ugcConfirms": int(s.get("ugcConfirms") or 0),
+                    "ugcConfirms": 0,
+                    "priceVerificationStatus": "unverified",
+                    "priceProvenance": "seed",
                     "source": "seed+osm",
                 }
             )
         else:
             rec = dict(s)
             rec["source"] = "seed"
+            rec["ugcConfirms"] = 0
+            rec["priceVerificationStatus"] = "unverified"
+            rec["priceProvenance"] = "seed"
             rec["name"] = pretty_park_name(str(rec.get("name") or "停車場"))
             out.append(rec)
     for i, o in enumerate(osm):
@@ -192,6 +197,9 @@ def merge_seed_over_osm(osm: list[dict], seeds: list[dict]) -> list[dict]:
 
 
 def row_sql(p: dict) -> str:
+    has_price = any(p.get(k) is not None for k in ("hourlyHkd", "dailyHkd", "nightHkd"))
+    prov = p.get("priceProvenance") or ("seed" if p.get("source", "").startswith("seed") else "osm")
+    vstat = p.get("priceVerificationStatus") or "unverified"
     return (
         "("
         f"{sql_str(p['id'])}, {sql_str(p.get('name') or '停車場')}, "
@@ -200,8 +208,10 @@ def row_sql(p: dict) -> str:
         f"{sql_num(p.get('heightM'))}, "
         f"{sql_num(p.get('hourlyHkd'))}, {sql_num(p.get('dailyHkd'))}, "
         f"{sql_num(p.get('nightHkd'))}, "
-        f"{sql_int(p.get('ugcConfirms') or 0)}, "
-        f"{sql_str(p.get('source') or 'osm')}"
+        f"0, "
+        f"{sql_str(p.get('source') or 'osm')}, "
+        f"{sql_str(vstat)}, "
+        f"{sql_str(prov)}"
         ")"
     )
 
@@ -221,6 +231,14 @@ on conflict (id) do update set
   daily_hkd = coalesce(public.parks.daily_hkd, excluded.daily_hkd),
   night_hkd = coalesce(public.parks.night_hkd, excluded.night_hkd),
   ugc_confirms = public.parks.ugc_confirms,
+  price_verification_status = case
+    when public.parks.price_verification_status = 'verified' then 'verified'
+    else excluded.price_verification_status
+  end,
+  price_provenance = case
+    when public.parks.price_verification_status = 'verified' then public.parks.price_provenance
+    else excluded.price_provenance
+  end,
   updated_at = now()
 """.strip()
 
@@ -231,7 +249,8 @@ def batch_sql(rows: list[dict]) -> str:
 select set_config('recordo.skip_catalog_bump', 'on', true);
 insert into public.parks (
   id, name, district, lat, lng, height_m,
-  hourly_hkd, daily_hkd, night_hkd, ugc_confirms, source
+  hourly_hkd, daily_hkd, night_hkd, ugc_confirms, source,
+  price_verification_status, price_provenance
 ) values
 {values}
 {UPSERT_TAIL};

@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "wedge": "銅鑼灣 + 尖沙咀",
+    "targetCount": 50,
+    "note": "Fill verified rows via scripts/import_wedge_verifications.py after gate check."
+  },
+  "queue": [
+    {"parkId": "ts_causeway", "name": "時代廣場停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "lee_garden_1", "name": "利園一期停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "lee_garden_3", "name": "利園三期停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "vp_cwb", "name": "維多利亞公園停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "hysan_place", "name": "希慎廣場停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "world_trade", "name": "世貿中心停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "hc_tst", "name": "海港城停車場", "district": "尖沙咀", "status": "pending"},
+    {"parkId": "k11_musea", "name": "K11 MUSEA 停車場", "district": "尖沙咀", "status": "pending"},
+    {"parkId": "i_square", "name": "國際廣場停車場", "district": "尖沙咀", "status": "pending"},
+    {"parkId": "k11_art", "name": "K11 Art Mall 停車場", "district": "尖沙咀", "status": "pending"},
+    {"parkId": "china_hk_city", "name": "中港城停車場", "district": "尖沙咀", "status": "pending"}
+  ],
+  "verified": []
+}

@@ -6,6 +6,7 @@ import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/price_verification.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/parks/sync_rules.dart';
 import 'package:recordo/features/session/parking_session.dart';
@@ -174,12 +175,15 @@ void main() {
       ugcConfirms: 2,
       source: 'seed+osm',
       priceNote: '首小時 28',
+      priceVerificationStatus: PriceVerificationStatus.unverified,
+      priceProvenance: PriceProvenance.seed,
     );
     final again = Park.fromJson(p.toJson());
     expect(again.id, p.id);
     expect(again.name, p.name);
     expect(again.hourlyHkd, 28);
     expect(again.priceNote, '首小時 28');
+    expect(again.priceProvenance, PriceProvenance.seed);
   });
 
   test('catalog cache writes a local snapshot', () async {
@@ -216,6 +220,7 @@ void main() {
       lat: 22.278,
       lng: 114.174,
       hourlyHkd: 28,
+      ugcConfirms: 3,
     );
     const a = Park(
       id: 'a',

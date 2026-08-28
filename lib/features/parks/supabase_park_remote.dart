@@ -54,7 +54,7 @@ class SupabaseParkRemote {
         var q = c
             .from('parks')
             .select(
-              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source',
+              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance',
             )
             .not('price_updated_at', 'is', null);
         if (since != null) {
@@ -87,7 +87,7 @@ class SupabaseParkRemote {
         final rows = await c
             .from('parks')
             .select(
-              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source',
+              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance',
             )
             .order('id')
             .range(from, from + page - 1);
@@ -123,7 +123,7 @@ class SupabaseParkRemote {
           daily: (m['daily_hkd'] as num?)?.toDouble(),
           night: (m['night_hkd'] as num?)?.toDouble(),
           priceNote: (m['price_note'] as String?)?.trim() ?? '',
-          confirms: m['ugc_confirms'] as int? ?? 1,
+          confirms: m['ugc_confirms'] as int? ?? 0,
           updatedAt: m['price_updated_at'] != null
               ? DateTime.tryParse(m['price_updated_at'] as String)
               : null,
@@ -214,7 +214,7 @@ class RemoteParkPrice {
     this.daily,
     this.night,
     this.priceNote = '',
-    this.confirms = 1,
+    this.confirms = 0,
     this.updatedAt,
   });
 
