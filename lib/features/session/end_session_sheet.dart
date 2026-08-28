@@ -3,21 +3,22 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
-import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/session/end_session_flow.dart';
 import 'package:recordo/features/session/parking_session.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
 /// Shared 「結束 · 填收費」sheet. Returns true if saved.
 Future<bool> showEndSessionSheet(BuildContext context) async {
-  final session = context.read<SessionCubit>().state.active;
+  final sessionCubit = context.read<SessionCubit>();
+  final session = sessionCubit.state.active;
   if (session == null) return false;
 
-  final catalog = context.read<ParkCatalogCubit>();
+  final catalogCubit = context.read<ParkCatalogCubit>();
   final park = session.parkId != null
-      ? catalog.parkById(session.parkId!)
-      : catalog.state.selected;
+      ? catalogCubit.parkById(session.parkId!)
+      : catalogCubit.state.selected;
 
   final result = await showModalBottomSheet<_EndResult>(
     context: context,
@@ -31,36 +32,22 @@ Future<bool> showEndSessionSheet(BuildContext context) async {
 
   if (result == null || !context.mounted) return false;
 
-  await context.read<SessionCubit>().end(
-        amountHkd: result.amount,
-        parkId: park?.id ?? session.parkId,
-        parkName: park?.name ?? session.parkName,
-      );
+  final outcome = await EndSessionFlow.complete(
+    sessionCubit: sessionCubit,
+    catalogCubit: catalogCubit,
+    active: session,
+    amountHkd: result.amount,
+    sharePaid: result.sharePaid,
+    park: park,
+  );
 
-  var snack = '已記低';
-  if (result.sharePaid &&
-      park != null &&
-      result.amount > 0 &&
-      context.mounted) {
-    try {
-      final cloud = await catalog.reportPaidSession(
-        parkId: park.id,
-        amountHkd: result.amount,
-        durationMinutes: session.elapsed.inMinutes,
-      );
-      snack = ContributionCopy.paidSession(cloud: cloud);
-    } on ArgumentError catch (e) {
-      snack = e.message?.toString() ?? '實付未能分享';
-    }
-  }
+  if (!context.mounted || outcome == null) return false;
 
-  if (context.mounted) {
-    HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(snack)),
-    );
-  }
-  return true;
+  HapticFeedback.lightImpact();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(outcome.snackMessage)),
+  );
+  return outcome.saved;
 }
 
 class _EndResult {
@@ -167,7 +154,6 @@ class _EndSessionSheetBodyState extends State<_EndSessionSheetBody> {
             onPressed: () {
               final v = double.tryParse(_amountCtrl.text.trim());
               if (v == null || v < 0) return;
-              // Pop with data BEFORE dispose — sheet owns controller until unmount.
               Navigator.pop(
                 context,
                 _EndResult(amount: v, sharePaid: _sharePaid),
