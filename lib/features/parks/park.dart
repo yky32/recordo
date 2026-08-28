@@ -1,4 +1,5 @@
 import 'package:recordo/features/parks/price_verification.dart';
+import 'package:recordo/features/parks/park_tariff.dart';
 
 /// OSM often names unnamed lots `停車場 (underground)` — last letter clips in
 /// the list, and English type tags read poorly. Map to short HK copy.
@@ -61,6 +62,7 @@ class Park {
     this.priceVerificationStatus = PriceVerificationStatus.unverified,
     this.priceVerifiedAt,
     this.priceProvenance = PriceProvenance.unknown,
+    this.tariff,
   });
 
   final String id;
@@ -80,9 +82,13 @@ class Park {
   final PriceVerificationStatus priceVerificationStatus;
   final DateTime? priceVerifiedAt;
   final PriceProvenance priceProvenance;
+  final ParkTariff? tariff;
 
   bool get hasPrice =>
-      hourlyHkd != null || dailyHkd != null || nightHkd != null;
+      hourlyHkd != null ||
+      dailyHkd != null ||
+      nightHkd != null ||
+      tariff != null;
 
   bool get hasPriceNote => priceNote.trim().isNotEmpty;
 
@@ -100,10 +106,16 @@ class Park {
 
   bool get showAsMapPriceChip => isVerifiedPrice || hasUgcReports;
 
+  String get verifiedTag =>
+      priceProvenance == PriceProvenance.operator ? '官方牌價' : '場內核實';
+
   /// Short badge for list / map chrome.
   String get priceBadgeLabel {
     if (!hasPrice) return '未有價';
-    if (isVerifiedPrice) return '場內核實';
+    if (isVerifiedPrice) {
+      if (priceProvenance == PriceProvenance.operator) return '官方牌價';
+      return '場內核實';
+    }
     if (hasUgcReports) return '司機報價';
     if (isSeedDemoPrice) return '未核實';
     return '未有價';
@@ -113,7 +125,7 @@ class Park {
   String get priceSummary {
     if (hourlyHkd != null) {
       final x = hourlyHkd!.toStringAsFixed(0);
-      if (isVerifiedPrice) return '約 HK\$$x/時 · 場內核實';
+      if (isVerifiedPrice) return '約 HK\$$x/時 · $verifiedTag';
       if (ugcConfirms >= 2) return '約 HK\$$x/時 · $ugcConfirms 人';
       if (ugcConfirms == 1) return '約 HK\$$x/時 · 1 人';
       if (isSeedDemoPrice) return '約 HK\$$x/時 · 未核實';
@@ -140,6 +152,11 @@ class Park {
     if (!hasPrice) return '未有人更新 · 你可以做第一個';
     if (isVerifiedPrice) {
       final when = priceVerifiedAt;
+      if (priceProvenance == PriceProvenance.operator) {
+        return tariff != null
+            ? '官方牌價 · 按${tariff!.unitLabel}計'
+            : '官方牌價';
+      }
       if (when != null) {
         final d = DateTime.now().difference(when);
         if (d.inDays < 30) return '場內核實 · ${d.inDays == 0 ? '今日' : '${d.inDays} 日前'}核對';
@@ -192,6 +209,7 @@ class Park {
     PriceVerificationStatus? priceVerificationStatus,
     DateTime? priceVerifiedAt,
     PriceProvenance? priceProvenance,
+    ParkTariff? tariff,
     bool clearPriceVerifiedAt = false,
   }) {
     return Park(
@@ -214,6 +232,7 @@ class Park {
           ? null
           : (priceVerifiedAt ?? this.priceVerifiedAt),
       priceProvenance: priceProvenance ?? this.priceProvenance,
+      tariff: tariff ?? this.tariff,
     );
   }
 
@@ -235,6 +254,7 @@ class Park {
             verificationStatusToJson(priceVerificationStatus),
         'priceVerifiedAt': priceVerifiedAt?.toUtc().toIso8601String(),
         'priceProvenance': priceProvenanceToJson(priceProvenance),
+        if (tariff != null) 'tariff': tariff!.toJson(),
       };
 
   factory Park.fromJson(Map<String, dynamic> m) {
@@ -262,6 +282,7 @@ class Park {
       priceProvenance: parsePriceProvenance(
         m['priceProvenance'] ?? m['price_provenance'],
       ),
+      tariff: ParkTariff.tryParse(m['tariff']),
     );
   }
 }
