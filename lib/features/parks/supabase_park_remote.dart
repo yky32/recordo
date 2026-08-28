@@ -1,5 +1,6 @@
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
+import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 
 /// Cloud catalog + UGC writes. Safe no-op if not configured / offline.
@@ -178,6 +179,30 @@ class SupabaseParkRemote {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<List<CommunityPaidSession>> fetchPaidSessions(
+    String parkId, {
+    int limit = 8,
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null || parkId.trim().isEmpty) return const [];
+    try {
+      final rows = await c
+          .from('paid_sessions')
+          .select('amount_hkd,duration_minutes,created_at')
+          .eq('park_id', parkId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+      return (rows as List)
+          .whereType<Map>()
+          .map((e) => CommunityPaidSession.fromJson(
+                Map<String, dynamic>.from(e),
+              ))
+          .toList();
+    } catch (_) {
+      return const [];
     }
   }
 

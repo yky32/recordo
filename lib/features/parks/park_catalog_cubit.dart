@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
@@ -19,6 +20,8 @@ class ParkCatalogState {
     this.totalInDb = 0,
     this.catalogVersion = 0,
     this.fromCloud = false,
+    this.communityPaidByPark = const {},
+    this.communityPaidLoading = const {},
   });
 
   final List<Park> parks;
@@ -37,8 +40,16 @@ class ParkCatalogState {
   final int totalInDb;
   final int catalogVersion;
   final bool fromCloud;
+  final Map<String, List<CommunityPaidSession>> communityPaidByPark;
+  final Set<String> communityPaidLoading;
 
   bool get isSearching => query.trim().isNotEmpty;
+
+  List<CommunityPaidSession> communityPaidFor(String parkId) =>
+      communityPaidByPark[parkId] ?? const [];
+
+  bool communityPaidLoadingFor(String parkId) =>
+      communityPaidLoading.contains(parkId);
 
   /// Featured + collapsed remainder — for map pins in the current window.
   List<Park> get allWindowParks => [...parks, ...restParks];
@@ -71,6 +82,8 @@ class ParkCatalogState {
     int? totalInDb,
     int? catalogVersion,
     bool? fromCloud,
+    Map<String, List<CommunityPaidSession>>? communityPaidByPark,
+    Set<String>? communityPaidLoading,
     bool clearSelected = false,
   }) {
     return ParkCatalogState(
@@ -87,6 +100,8 @@ class ParkCatalogState {
       totalInDb: totalInDb ?? this.totalInDb,
       catalogVersion: catalogVersion ?? this.catalogVersion,
       fromCloud: fromCloud ?? this.fromCloud,
+      communityPaidByPark: communityPaidByPark ?? this.communityPaidByPark,
+      communityPaidLoading: communityPaidLoading ?? this.communityPaidLoading,
     );
   }
 }
@@ -269,7 +284,32 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       amountHkd: amountHkd,
       durationMinutes: durationMinutes,
     );
+    if (cloud) {
+      await loadCommunityPaid(parkId);
+    }
     return cloud;
+  }
+
+  Future<void> loadCommunityPaid(String parkId, {int limit = 8}) async {
+    if (parkId.trim().isEmpty) return;
+    emit(
+      state.copyWith(
+        communityPaidLoading: {...state.communityPaidLoading, parkId},
+      ),
+    );
+    final rows = await _repo.fetchCommunityPaidSessions(parkId, limit: limit);
+    if (isClosed) return;
+    final nextLoading = Set<String>.from(state.communityPaidLoading)
+      ..remove(parkId);
+    final nextMap =
+        Map<String, List<CommunityPaidSession>>.from(state.communityPaidByPark);
+    nextMap[parkId] = rows;
+    emit(
+      state.copyWith(
+        communityPaidByPark: nextMap,
+        communityPaidLoading: nextLoading,
+      ),
+    );
   }
 
   /// Check cloud version; dump only if newer.

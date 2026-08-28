@@ -8,6 +8,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
 import 'package:recordo/features/session/remind_log_service.dart';
 import 'package:recordo/features/session/session_alarm_service.dart';
+import 'package:recordo/features/settings/settings_cubit.dart';
 import 'package:recordo/features/parks/catalog_lifecycle.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -33,6 +34,7 @@ Future<void> main() async {
     runApp(
       MultiBlocProvider(
         providers: [
+          BlocProvider(create: (_) => SettingsCubit()..hydrate()),
           BlocProvider(create: (_) => ParkCatalogCubit()..load()),
           BlocProvider(create: (_) => SessionCubit()..hydrate()),
         ],

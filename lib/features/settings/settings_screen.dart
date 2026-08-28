@@ -4,48 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
-import 'package:recordo/core/bootstrap.dart';
-import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/parks/park_repository.dart';
-import 'package:recordo/features/session/remind_log_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:recordo/features/session/session_cubit.dart';
+import 'package:recordo/features/settings/settings_cubit.dart';
 
 /// Uber-style settings hub.
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _haptics = true;
-  bool _remindLog = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _haptics = prefs.getBool(StorageKeys.prefHaptics) ?? true;
-      _remindLog = prefs.getBool(StorageKeys.prefRemindLog) ?? false;
-    });
-  }
-
-  Future<void> _setBool(String key, bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, v);
-  }
-
-  Future<void> _clearHistory() async {
+  Future<void> _clearHistory(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -70,16 +40,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
-    await Bootstrap.store.remove(StorageKeys.sessions);
-    await Bootstrap.store.remove(StorageKeys.activeSession);
+    if (ok != true || !context.mounted) return;
+    await context.read<SessionCubit>().clearHistory();
     HapticFeedback.mediumImpact();
-    if (mounted) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已清除記錄')),
       );
     }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<SettingsCubit, SettingsState>(
+      listenWhen: (prev, next) => prev.snackMessage != next.snackMessage,
+      listener: (context, state) {
+        final msg = state.snackMessage;
+        if (msg == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        context.read<SettingsCubit>().clearSnack();
+      },
+      builder: (context, prefs) {
+        return _SettingsBody(
+          haptics: prefs.haptics,
+          remindLog: prefs.remindLog,
+          onClearHistory: () => _clearHistory(context),
+        );
+      },
+    );
+  }
+}
+
+class _SettingsBody extends StatelessWidget {
+  const _SettingsBody({
+    required this.haptics,
+    required this.remindLog,
+    required this.onClearHistory,
+  });
+
+  final bool haptics;
+  final bool remindLog;
+  final VoidCallback onClearHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: '清除泊車記錄',
                 subtitle: '本機資料',
                 destructive: true,
-                onTap: _clearHistory,
+                onTap: onClearHistory,
               ),
             ],
           ),
@@ -201,35 +204,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _ToggleRow(
                 icon: Icons.vibration_rounded,
                 title: '觸感回饋',
-                value: _haptics,
-                onChanged: (v) {
-                  setState(() => _haptics = v);
-                  _setBool(StorageKeys.prefHaptics, v);
-                },
+                value: haptics,
+                onChanged: (v) =>
+                    context.read<SettingsCubit>().setHaptics(v),
               ),
               _ToggleRow(
                 icon: Icons.notifications_none_rounded,
                 title: '提醒記低泊車',
                 subtitle: '泊車約 90 分鐘後提醒你填收費',
-                value: _remindLog,
-                onChanged: (v) async {
-                  setState(() => _remindLog = v);
-                  await _setBool(StorageKeys.prefRemindLog, v);
-                  if (!context.mounted) return;
-                  if (v) {
-                    await RemindLogService.instance.init();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已開 · 泊車後會提醒你填收費')),
-                    );
-                  } else {
-                    await RemindLogService.instance.cancel();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已關閉提醒')),
-                    );
-                  }
-                },
+                value: remindLog,
+                onChanged: (v) =>
+                    context.read<SettingsCubit>().setRemindLog(v),
               ),
             ],
           ),

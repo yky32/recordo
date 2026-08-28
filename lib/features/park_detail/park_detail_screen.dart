@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
+import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
@@ -29,6 +30,15 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   final _daily = TextEditingController();
   final _night = TextEditingController();
   final _note = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<ParkCatalogCubit>().loadCommunityPaid(widget.parkId);
+    });
+  }
 
   @override
   void dispose() {
@@ -479,19 +489,19 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   }
 }
 
-/// Recent real payments from local session history (this device).
+/// Recent real payments — community (cloud) + local session history.
 class _PaidHistoryCard extends StatelessWidget {
   const _PaidHistoryCard({required this.parkId});
   final String parkId;
 
-  String _fmtDur(Duration d) {
+  static String _fmtDur(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60);
     if (h > 0) return '$h 小時 $m 分';
     return '$m 分鐘';
   }
 
-  String _fmtWhen(DateTime t) {
+  static String _fmtWhen(DateTime t) {
     final d = DateTime.now().difference(t);
     if (d.inMinutes < 60) return '${d.inMinutes} 分鐘前';
     if (d.inHours < 48) return '${d.inHours} 小時前';
@@ -500,49 +510,93 @@ class _PaidHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<SessionCubit, SessionState>(
-      builder: (context, session) {
-        final paid =
-            context.read<SessionCubit>().paidSessionsForPark(parkId);
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-          decoration: BoxDecoration(
-            color: UberColors.elevated,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: UberColors.hairline),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('最近實付', style: RType.label()),
-              const SizedBox(height: 6),
-              if (paid.isEmpty)
-                Text(
-                  '未有實付 · 泊完填收費就會出現',
-                  style: RType.muted(),
-                )
-              else ...[
-                for (var i = 0; i < paid.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'HK\$${paid[i].amountHkd!.toStringAsFixed(0)} · ${_fmtDur(paid[i].elapsed)}',
-                          style: RType.body(),
+    return BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
+      buildWhen: (prev, next) =>
+          prev.communityPaidByPark[parkId] != next.communityPaidByPark[parkId] ||
+          prev.communityPaidLoading.contains(parkId) !=
+              next.communityPaidLoading.contains(parkId),
+      builder: (context, cat) {
+        return BlocBuilder<SessionCubit, SessionState>(
+          builder: (context, session) {
+            final local =
+                context.read<SessionCubit>().paidSessionsForPark(parkId);
+            final community = cat.communityPaidFor(parkId);
+            final loading = cat.communityPaidLoadingFor(parkId);
+            final hasCommunity = community.isNotEmpty;
+            final hasLocal = local.isNotEmpty;
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              decoration: BoxDecoration(
+                color: UberColors.elevated,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: UberColors.hairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('最近實付', style: RType.label()),
+                  if (RecordoSupabase.isReady && hasCommunity) ...[
+                    const SizedBox(height: 4),
+                    Text('其他司機分享', style: RType.muted()),
+                  ],
+                  const SizedBox(height: 6),
+                  if (loading && !hasCommunity && !hasLocal)
+                    Text('載入中…', style: RType.muted())
+                  else if (!hasCommunity && !hasLocal)
+                    Text(
+                      '未有實付 · 泊完填收費就會出現',
+                      style: RType.muted(),
+                    )
+                  else ...[
+                    if (hasCommunity)
+                      for (var i = 0; i < community.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'HK\$${community[i].amountHkd.toStringAsFixed(0)} · ${_fmtDur(community[i].duration)}',
+                                style: RType.body(),
+                              ),
+                            ),
+                            Text(
+                              _fmtWhen(community[i].createdAt),
+                              style: RType.muted(),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        _fmtWhen(paid[i].endedAt!),
-                        style: RType.muted(),
-                      ),
+                      ],
+                    if (hasLocal) ...[
+                      if (hasCommunity) ...[
+                        const SizedBox(height: 12),
+                        Text('本機', style: RType.muted()),
+                        const SizedBox(height: 6),
+                      ],
+                      for (var i = 0; i < local.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'HK\$${local[i].amountHkd!.toStringAsFixed(0)} · ${_fmtDur(local[i].elapsed)}',
+                                style: RType.body(),
+                              ),
+                            ),
+                            Text(
+                              _fmtWhen(local[i].endedAt!),
+                              style: RType.muted(),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ),
+                  ],
                 ],
-              ],
-            ],
-          ),
+              ),
+            );
+          },
         );
       },
     );
