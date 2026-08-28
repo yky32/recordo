@@ -50,4 +50,5 @@ abstract final class StorageKeys {
   static const remindLogSessionId = 'remind_log_session_id';
   static const sessionAlarmAt = 'session_alarm_at';
   static const sessionAlarmSessionId = 'session_alarm_session_id';
+  static const cohortInstallId = 'cohort_install_id';
 }

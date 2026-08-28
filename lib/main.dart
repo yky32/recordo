@@ -5,6 +5,7 @@ import 'package:recordo/app/app.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/features/session/cohort_telemetry.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
 import 'package:recordo/features/session/remind_log_service.dart';
 import 'package:recordo/features/session/session_alarm_service.dart';
@@ -28,6 +29,8 @@ Future<void> main() async {
     await LiveActivityService.instance.init();
     await RemindLogService.instance.init();
     await SessionAlarmService.instance.init();
+    // ignore: unawaited_futures
+    CohortTelemetry.appOpen();
     _syncSystemUi();
     ThemeController.instance.addListener(_syncSystemUi);
 

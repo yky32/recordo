@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
@@ -13,6 +14,7 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Park detail — map hero + price card + actions. No bottom dual CTA bar.
 class ParkDetailScreen extends StatefulWidget {
@@ -79,18 +81,32 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
   Future<void> _sharePark(BuildContext context, Park p) async {
     final lines = <String>[
-      p.name,
+      'Recordo · ${p.name}',
       if (p.district.isNotEmpty) p.district,
       if (p.hasPrice) p.priceSummary else '未有收費',
       'https://maps.google.com/?q=${p.lat},${p.lng}',
+      '',
+      '記低實付 · 銅鑼灣/尖沙咀 · 免費唔賣訂閱',
+      'TestFlight 搜 Recordo 下載試用',
     ];
-    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    await SharePlus.instance.share(ShareParams(text: lines.join('\n')));
     HapticFeedback.lightImpact();
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已複製場資料 · 可以分享俾朋友')),
-      );
+  }
+
+  Future<void> _startTimer(BuildContext context, Park p) async {
+    final session = context.read<SessionCubit>();
+    if (session.state.active != null) {
+      if (context.mounted) context.push('/session');
+      return;
     }
+    context.read<ParkCatalogCubit>().select(p.id);
+    await session.start(
+      parkId: p.id,
+      parkName: p.name,
+      hourlyLabel: p.hasPrice ? p.priceSummary : null,
+    );
+    HapticFeedback.mediumImpact();
+    if (context.mounted) context.push('/session');
   }
 
   Future<void> _submit(BuildContext context, Park p) async {
@@ -333,7 +349,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
 
                       const SizedBox(height: 20),
 
-                      // Navigate out — primary after user likes the park
+                      // Start timer — primary for Phase C cohort smoke path
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -345,9 +361,28 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               borderRadius: BorderRadius.circular(28),
                             ),
                           ),
+                          onPressed: () => _startTimer(context, p),
+                          icon: const Icon(Icons.timer_outlined),
+                          label: const Text('開始計時'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Navigate out
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: UberColors.white,
+                            side: BorderSide(color: UberColors.hairline),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
                           onPressed: () =>
                               ParkNavigation.showChooser(context, p),
-                          icon: const Icon(Icons.directions_rounded),
+                          icon: const Icon(Icons.directions_rounded, size: 18),
                           label: const Text('開始導航'),
                         ),
                       ),

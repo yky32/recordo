@@ -33,7 +33,7 @@ class RemindLogService {
 
   Future<bool> _prefEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(StorageKeys.prefRemindLog) ?? false;
+    return prefs.getBool(StorageKeys.prefRemindLog) ?? true;
   }
 
   Future<bool> _ensurePermission() async {

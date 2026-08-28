@@ -2,9 +2,12 @@ import 'package:recordo/features/parks/park.dart';
 
 /// Snackbar copy after UGC contributions.
 abstract final class ContributionCopy {
+  /// Cloud not wired into this build (missing dart-defines).
+  static const paidSessionOfflineBuild = '已記低實付（本機 · 呢個 build 未接雲端）';
+
   static String paidSession({required bool cloud}) {
     if (cloud) return '已分享實付 · 多謝';
-    return '已記低實付（本機 · 有網會同步）';
+    return '已記低實付（本機 · 稍後有網再試同步）';
   }
 
   static String priceReport({required bool cloud, Park? park}) {

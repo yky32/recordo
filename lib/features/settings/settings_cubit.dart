@@ -47,7 +47,7 @@ class SettingsCubit extends Cubit<SettingsState> {
     emit(
       SettingsState(
         haptics: prefs.getBool(StorageKeys.prefHaptics) ?? true,
-        remindLog: prefs.getBool(StorageKeys.prefRemindLog) ?? false,
+        remindLog: prefs.getBool(StorageKeys.prefRemindLog) ?? true,
         wedgeExplained: wedge,
         loaded: true,
       ),
