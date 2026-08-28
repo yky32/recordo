@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/parking_session.dart';
@@ -36,32 +37,36 @@ Future<bool> showEndSessionSheet(BuildContext context) async {
         parkName: park?.name ?? session.parkName,
       );
 
-  if (result.updatePrice &&
+  var snack = '已記低';
+  if (result.sharePaid &&
       park != null &&
       result.amount > 0 &&
       context.mounted) {
-    final hours = session.elapsed.inMinutes / 60.0;
-    final hourlyGuess =
-        hours >= 0.25 ? (result.amount / hours) : result.amount;
-    await catalog.reportPrice(
-      parkId: park.id,
-      hourly: double.parse(hourlyGuess.toStringAsFixed(0)),
-    );
+    try {
+      final cloud = await catalog.reportPaidSession(
+        parkId: park.id,
+        amountHkd: result.amount,
+        durationMinutes: session.elapsed.inMinutes,
+      );
+      snack = ContributionCopy.paidSession(cloud: cloud);
+    } on ArgumentError catch (e) {
+      snack = e.message?.toString() ?? '實付未能分享';
+    }
   }
 
   if (context.mounted) {
     HapticFeedback.lightImpact();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已記低')),
+      SnackBar(content: Text(snack)),
     );
   }
   return true;
 }
 
 class _EndResult {
-  const _EndResult({required this.amount, required this.updatePrice});
+  const _EndResult({required this.amount, required this.sharePaid});
   final double amount;
-  final bool updatePrice;
+  final bool sharePaid;
 }
 
 /// Owns [TextEditingController] for the sheet lifetime only.
@@ -80,13 +85,13 @@ class _EndSessionSheetBody extends StatefulWidget {
 
 class _EndSessionSheetBodyState extends State<_EndSessionSheetBody> {
   late final TextEditingController _amountCtrl;
-  late bool _updatePrice;
+  late bool _sharePaid;
 
   @override
   void initState() {
     super.initState();
     _amountCtrl = TextEditingController();
-    _updatePrice = widget.park != null;
+    _sharePaid = widget.park != null;
     final hourly = widget.park?.hourlyHkd;
     if (hourly != null && hourly > 0) {
       final hours = widget.session.elapsed.inSeconds / 3600.0;
@@ -140,10 +145,14 @@ class _EndSessionSheetBodyState extends State<_EndSessionSheetBody> {
           if (park != null)
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: Text('順便更新場價', style: RType.body()),
-              value: _updatePrice,
+              title: Text('分享實付俾其他司機', style: RType.body()),
+              subtitle: Text(
+                '只分享金額同泊車時間 · 唔會改場價',
+                style: RType.muted(),
+              ),
+              value: _sharePaid,
               activeThumbColor: UberColors.accent,
-              onChanged: (v) => setState(() => _updatePrice = v),
+              onChanged: (v) => setState(() => _sharePaid = v),
             ),
           const SizedBox(height: 8),
           FilledButton(
@@ -161,7 +170,7 @@ class _EndSessionSheetBodyState extends State<_EndSessionSheetBody> {
               // Pop with data BEFORE dispose — sheet owns controller until unmount.
               Navigator.pop(
                 context,
-                _EndResult(amount: v, updatePrice: _updatePrice),
+                _EndResult(amount: v, sharePaid: _sharePaid),
               );
             },
             child: const Text('儲存'),

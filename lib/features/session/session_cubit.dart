@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/session/live_activity_service.dart';
+import 'package:recordo/features/session/remind_log_service.dart';
 import 'package:recordo/features/session/parking_session.dart';
 import 'package:uuid/uuid.dart';
 
@@ -79,6 +80,10 @@ class SessionCubit extends Cubit<SessionState> {
       s,
       hourlyLabel: hourlyLabel,
     );
+    await RemindLogService.instance.scheduleForSession(
+      sessionId: s.id,
+      startedAt: s.startedAt,
+    );
   }
 
   Future<void> end({
@@ -104,6 +109,7 @@ class SessionCubit extends Cubit<SessionState> {
     await Bootstrap.store.remove(StorageKeys.activeSession);
     emit(SessionState(active: null, history: history));
     await LiveActivityService.instance.end();
+    await RemindLogService.instance.cancel();
   }
 
   /// Completed sessions for a park with amount (newest first).

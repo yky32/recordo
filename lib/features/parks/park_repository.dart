@@ -449,6 +449,39 @@ class ParkRepository {
     return !_outbox.read().any((j) => j.id == jobId);
   }
 
+  /// Share a real payment (amount + duration). Never writes hourly median.
+  Future<bool> reportPaidSession({
+    required String parkId,
+    required double amountHkd,
+    required int durationMinutes,
+  }) async {
+    if (parkId.trim().isEmpty) {
+      throw ArgumentError('缺少場 ID');
+    }
+    if (amountHkd <= 0 || amountHkd >= 10000) {
+      throw ArgumentError('實付金額無效');
+    }
+    if (durationMinutes < 0 || durationMinutes >= 10080) {
+      throw ArgumentError('泊車時長無效');
+    }
+
+    final jobId = 'paid-$parkId-${DateTime.now().millisecondsSinceEpoch}';
+    await _outbox.enqueue(
+      SyncJob(
+        id: jobId,
+        type: 'paid',
+        createdAt: DateTime.now().toUtc(),
+        payload: {
+          'parkId': parkId,
+          'amountHkd': amountHkd,
+          'durationMinutes': durationMinutes,
+        },
+      ),
+    );
+    await _outbox.flush(_remote);
+    return !_outbox.read().any((j) => j.id == jobId);
+  }
+
   Future<Park> reportNewPark({
     required String name,
     required String district,

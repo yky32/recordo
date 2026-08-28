@@ -162,6 +162,25 @@ class SupabaseParkRemote {
     }
   }
 
+  Future<bool> insertPaidSession({
+    required String parkId,
+    required double amountHkd,
+    required int durationMinutes,
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return false;
+    try {
+      await c.from('paid_sessions').insert({
+        'park_id': parkId,
+        'amount_hkd': amountHkd,
+        'duration_minutes': durationMinutes,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> insertPriceReport({
     required String parkId,
     double? hourly,

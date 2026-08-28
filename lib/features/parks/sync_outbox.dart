@@ -75,6 +75,10 @@ bool outboxJobPoison(SyncJob job) {
   if (job.type == 'park') {
     return '${job.payload['id'] ?? ''}'.trim().isEmpty;
   }
+  if (job.type == 'paid') {
+    return '${job.payload['parkId'] ?? ''}'.trim().isEmpty ||
+        jsonDouble(job.payload['amountHkd']) == null;
+  }
   return true;
 }
 
@@ -141,6 +145,13 @@ class SyncOutbox {
         ),
         note: p['note'] as String? ?? '',
         address: p['address'] as String? ?? '',
+      );
+    }
+    if (job.type == 'paid') {
+      return remote.insertPaidSession(
+        parkId: p['parkId'] as String? ?? '',
+        amountHkd: jsonDouble(p['amountHkd']) ?? 0,
+        durationMinutes: jsonInt(p['durationMinutes']),
       );
     }
     return remote.insertPriceReport(

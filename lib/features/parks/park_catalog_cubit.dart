@@ -258,6 +258,20 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     return cloud;
   }
 
+  /// Share real payment to community table (not hourly price).
+  Future<bool> reportPaidSession({
+    required String parkId,
+    required double amountHkd,
+    required int durationMinutes,
+  }) async {
+    final cloud = await _repo.reportPaidSession(
+      parkId: parkId,
+      amountHkd: amountHkd,
+      durationMinutes: durationMinutes,
+    );
+    return cloud;
+  }
+
   /// Check cloud version; dump only if newer.
   Future<CatalogSyncResult> syncFromCloud({bool force = false}) async {
     try {

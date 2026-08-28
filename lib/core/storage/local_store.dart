@@ -47,4 +47,5 @@ abstract final class StorageKeys {
   static const prefRemindLog = 'pref_remind_log';
   static const liveActivityId = 'live_activity_id';
   static const wedgeExplained = 'wedge_explained';
+  static const remindLogSessionId = 'remind_log_session_id';
 }
