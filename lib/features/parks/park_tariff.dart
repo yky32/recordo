@@ -88,6 +88,16 @@ class ParkTariff {
       };
 }
 
+String tariffDaysLabel(String days) => switch (days) {
+      'mon-thu' => '星期一至四（公眾假期除外）',
+      'mon-fri' => '星期一至五',
+      'fri-sun-ph' => '星期五、六、日及公眾假期',
+      'sat-sun-ph' => '星期六、日及公眾假期',
+      'sun-fri' => '星期日至五',
+      'daily' => '每日',
+      _ => days,
+    };
+
 class TariffBand {
   const TariffBand({
     required this.days,
@@ -97,7 +107,7 @@ class TariffBand {
     required this.amount,
   });
 
-  /// mon-fri | sat-sun-ph | sun-fri | daily
+  /// mon-thu | mon-fri | fri-sun-ph | sat-sun-ph | sun-fri | daily
   final String days;
   /// peak | offpeak
   final String kind;
@@ -105,13 +115,7 @@ class TariffBand {
   final String end;
   final double amount;
 
-  String get daysLabel => switch (days) {
-        'mon-fri' => '星期一至五',
-        'sat-sun-ph' => '星期六、日及公眾假期',
-        'sun-fri' => '星期日至五',
-        'daily' => '每日',
-        _ => days,
-      };
+  String get daysLabel => tariffDaysLabel(days);
 
   String get kindLabel => kind == 'offpeak' ? '非繁忙' : '繁忙時間';
 
@@ -159,13 +163,7 @@ class TariffValidation {
   final double freeHours;
   final String? entryAfter;
 
-  String get daysLabel => switch (days) {
-        'mon-fri' => '星期一至五',
-        'sat-sun-ph' => '星期六、日及公眾假期',
-        'sun-fri' => '星期日至五',
-        'daily' => '每日',
-        _ => days,
-      };
+  String get daysLabel => tariffDaysLabel(days);
 
   String get line {
     final spend = spendHkd.toStringAsFixed(0);
