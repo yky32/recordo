@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
@@ -47,32 +46,22 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
   }
 
   Future<void> _probeLocation() async {
-    try {
-      final cat = context.read<ParkCatalogCubit>().state;
-      if (cat.userLat != null && cat.userLng != null) {
-        setState(() {
-          _locLabel =
-              '${cat.userLat!.toStringAsFixed(5)}, ${cat.userLng!.toStringAsFixed(5)}';
-        });
-        return;
-      }
-      final pos = await Geolocator.getLastKnownPosition() ??
-          await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.medium,
-              timeLimit: Duration(seconds: 6),
-            ),
-          );
-      if (!mounted) return;
+    final cat = context.read<ParkCatalogCubit>();
+    final cached = cat.state;
+    if (cached.userLat != null && cached.userLng != null) {
       setState(() {
         _locLabel =
-            '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
+            '${cached.userLat!.toStringAsFixed(5)}, ${cached.userLng!.toStringAsFixed(5)}';
       });
-    } catch (_) {
-      if (mounted) {
-        setState(() => _locLabel = '未能讀取定位 · 仍可提交');
-      }
+      return;
     }
+    final result = await cat.resolveUserLocation(requestPermission: false);
+    if (!mounted) return;
+    setState(() {
+      _locLabel = result.ok
+          ? '${result.lat!.toStringAsFixed(5)}, ${result.lng!.toStringAsFixed(5)}'
+          : (result.error ?? '未能讀取定位 · 仍可提交');
+    });
   }
 
   Future<void> _submit() async {
@@ -100,22 +89,11 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
     double? lat;
     double? lng;
     if (_useMyLocation) {
-      try {
-        final cat = cubit.state;
-        if (cat.userLat != null) {
-          lat = cat.userLat;
-          lng = cat.userLng;
-        } else {
-          final pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.medium,
-              timeLimit: Duration(seconds: 8),
-            ),
-          );
-          lat = pos.latitude;
-          lng = pos.longitude;
-        }
-      } catch (_) {}
+      final loc = await cubit.resolveUserLocation(updateCatalog: true);
+      if (loc.ok) {
+        lat = loc.lat;
+        lng = loc.lng;
+      }
     }
 
     await cubit.reportNewPark(

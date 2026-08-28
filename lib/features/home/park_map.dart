@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/location/user_location.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_clusters.dart';
@@ -186,61 +187,28 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     setState(() => _locating = true);
     widget.onLocateState?.call(true, null);
     try {
-      final enabled = await Geolocator.isLocationServiceEnabled();
-      if (!enabled) {
-        widget.onLocateState?.call(false, '請開定位服務');
+      final result = await UserLocationResolver.resolve();
+      if (result.error != null) {
+        widget.onLocateState?.call(false, result.error);
         return;
       }
-
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-      }
-      if (perm == LocationPermission.denied) {
-        widget.onLocateState?.call(false, '未有定位權限');
-        return;
-      }
-      if (perm == LocationPermission.deniedForever) {
-        widget.onLocateState?.call(false, '請去設定開定位');
-        return;
-      }
-
-      Position? pos;
-      try {
-        pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.medium,
-            timeLimit: Duration(seconds: 8),
-          ),
-        );
-      } catch (_) {
-        pos = await Geolocator.getLastKnownPosition();
-      }
-      if (pos == null) {
+      if (!result.ok) {
         widget.onLocateState?.call(false, '定位失敗 · 再試');
         return;
       }
 
-      final hk = Geolocator.distanceBetween(
-        pos.latitude,
-        pos.longitude,
-        hkCenter.latitude,
-        hkCenter.longitude,
+      final pos = Position(
+        latitude: result.lat!,
+        longitude: result.lng!,
+        timestamp: DateTime.now(),
+        accuracy: 10,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
       );
-      if (hk > 500000) {
-        pos = Position(
-          longitude: 114.1747,
-          latitude: 22.2783,
-          timestamp: DateTime.now(),
-          accuracy: 10,
-          altitude: 0,
-          altitudeAccuracy: 0,
-          heading: 0,
-          headingAccuracy: 0,
-          speed: 0,
-          speedAccuracy: 0,
-        );
-      }
 
       _applyPosition(pos, moveCamera: forceCamera || !_didInitialRecenter);
       widget.onLocateState?.call(false, null);

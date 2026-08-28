@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:recordo/core/location/user_location.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_rank.dart';
@@ -249,6 +250,23 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     if (meters == null) return '';
     if (meters < 1000) return '${meters.round()} m';
     return '${(meters / 1000).toStringAsFixed(1)} km';
+  }
+
+  /// Cached catalog coords, else one-shot Geolocator lookup.
+  Future<UserLocationResult> resolveUserLocation({
+    bool requestPermission = true,
+    bool updateCatalog = false,
+  }) async {
+    if (state.userLat != null && state.userLng != null) {
+      return UserLocationResult(lat: state.userLat, lng: state.userLng);
+    }
+    final result = await UserLocationResolver.resolve(
+      requestPermission: requestPermission,
+    );
+    if (updateCatalog && result.ok) {
+      setUserLocation(result.lat!, result.lng!);
+    }
+    return result;
   }
 
   /// true = also pushed to shared Supabase DB.
