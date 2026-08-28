@@ -11,6 +11,7 @@ import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -253,7 +254,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('司機報價', style: RType.label()),
+                            Text(p.priceBadgeLabel, style: RType.label()),
                             SizedBox(height: 8),
                             Text(
                               p.hasPrice ? p.priceSummary : '未有收費',
@@ -325,9 +326,12 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               const SizedBox(height: 14),
                               Divider(height: 1, color: UberColors.hairline),
                               SizedBox(height: 12),
-                              _PriceBreakdown(park: p),
+                              if (p.tariff != null)
+                                _TariffCard(tariff: p.tariff!)
+                              else
+                                _PriceBreakdown(park: p),
                             ],
-                            if (p.hasPriceNote) ...[
+                            if (p.hasPriceNote && p.tariff == null) ...[
                               const SizedBox(height: 12),
                               Text('收費備註', style: RType.label()),
                               const SizedBox(height: 4),
@@ -640,6 +644,56 @@ class _PaidHistoryCard extends StatelessWidget {
 
 SliverToBoxAdapter sliverToBox({required Widget child}) =>
     SliverToBoxAdapter(child: child);
+
+class _TariffCard extends StatelessWidget {
+  const _TariffCard({required this.tariff});
+  final ParkTariff tariff;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('按${tariff.unitLabel}計', style: RType.label()),
+        const SizedBox(height: 10),
+        for (final days in tariff.dayOrder) ...[
+          Text(tariff.bands.firstWhere((b) => b.days == days).daysLabel,
+              style: RType.body()),
+          const SizedBox(height: 6),
+          for (final b in tariff.bands.where((e) => e.days == days)) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${b.kindLabel}（${b.windowLabel}）',
+                    style: RType.muted(),
+                  ),
+                ),
+                Text(
+                  'HK\$${b.amount.toStringAsFixed(0)} / ${tariff.unitLabel}',
+                  style: RType.body(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
+          const SizedBox(height: 6),
+        ],
+        if (tariff.validations.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Divider(height: 1, color: UberColors.hairline),
+          const SizedBox(height: 10),
+          Text('商場優惠', style: RType.label()),
+          const SizedBox(height: 6),
+          for (final v in tariff.validations) ...[
+            Text(v.line, style: RType.muted()),
+            const SizedBox(height: 4),
+          ],
+        ],
+      ],
+    );
+  }
+}
 
 class _PriceBreakdown extends StatelessWidget {
   const _PriceBreakdown({required this.park});
