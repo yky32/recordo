@@ -1,3 +1,5 @@
+import 'package:recordo/features/parks/price_verification.dart';
+
 /// OSM often names unnamed lots `停車場 (underground)` — last letter clips in
 /// the list, and English type tags read poorly. Map to short HK copy.
 String prettyParkName(String raw) {
@@ -56,6 +58,9 @@ class Park {
     this.priceUpdatedAt,
     this.source = 'seed',
     this.priceNote = '',
+    this.priceVerificationStatus = PriceVerificationStatus.unverified,
+    this.priceVerifiedAt,
+    this.priceProvenance = PriceProvenance.unknown,
   });
 
   final String id;
@@ -72,27 +77,60 @@ class Park {
   final String source;
   /// Free-text rule, e.g. 「首小時 $30 · 之後每半鐘 $15」
   final String priceNote;
+  final PriceVerificationStatus priceVerificationStatus;
+  final DateTime? priceVerifiedAt;
+  final PriceProvenance priceProvenance;
 
   bool get hasPrice =>
       hourlyHkd != null || dailyHkd != null || nightHkd != null;
 
   bool get hasPriceNote => priceNote.trim().isNotEmpty;
 
+  bool get isVerifiedPrice =>
+      hasPrice && priceVerificationStatus == PriceVerificationStatus.verified;
+
+  bool get isSeedDemoPrice =>
+      hasPrice &&
+      !isVerifiedPrice &&
+      (priceProvenance == PriceProvenance.seed ||
+          source == 'seed' ||
+          source == 'seed+osm');
+
+  bool get hasUgcReports => ugcConfirms > 0;
+
+  bool get showAsMapPriceChip => isVerifiedPrice || hasUgcReports;
+
+  /// Short badge for list / map chrome.
+  String get priceBadgeLabel {
+    if (!hasPrice) return '未有價';
+    if (isVerifiedPrice) return '場內核實';
+    if (hasUgcReports) return '司機報價';
+    if (isSeedDemoPrice) return '未核實';
+    return '未有價';
+  }
+
   /// List / hero line — median-style display with report count when known.
   String get priceSummary {
     if (hourlyHkd != null) {
       final x = hourlyHkd!.toStringAsFixed(0);
+      if (isVerifiedPrice) return '約 HK\$$x/時 · 場內核實';
       if (ugcConfirms >= 2) return '約 HK\$$x/時 · $ugcConfirms 人';
       if (ugcConfirms == 1) return '約 HK\$$x/時 · 1 人';
+      if (isSeedDemoPrice) return '約 HK\$$x/時 · 未核實';
       return '約 HK\$$x/時';
     }
     if (dailyHkd != null) {
       final x = dailyHkd!.toStringAsFixed(0);
+      if (isVerifiedPrice) return '約 HK\$$x/日 · 場內核實';
       if (ugcConfirms >= 2) return '約 HK\$$x/日 · $ugcConfirms 人';
+      if (isSeedDemoPrice) return '約 HK\$$x/日 · 未核實';
       return '約 HK\$$x/日';
     }
     if (nightHkd != null) {
-      return '夜泊約 HK\$${nightHkd!.toStringAsFixed(0)}';
+      final base = '夜泊約 HK\$${nightHkd!.toStringAsFixed(0)}';
+      if (isVerifiedPrice) return '$base · 場內核實';
+      if (isSeedDemoPrice) return '$base · 未核實';
+      return base;
     }
     return '未有收費';
   }
@@ -100,6 +138,15 @@ class Park {
   /// Trust copy under the price.
   String get trustLabel {
     if (!hasPrice) return '未有人更新 · 你可以做第一個';
+    if (isVerifiedPrice) {
+      final when = priceVerifiedAt;
+      if (when != null) {
+        final d = DateTime.now().difference(when);
+        if (d.inDays < 30) return '場內核實 · ${d.inDays == 0 ? '今日' : '${d.inDays} 日前'}核對';
+      }
+      return '場內核實 · 閘口牌價';
+    }
+    if (isSeedDemoPrice) return '示範價 · 未核實 · 歡迎報價';
     if (ugcConfirms >= 8) return '較多司機報告 · 中位參考價';
     if (ugcConfirms >= 3) return '$ugcConfirms 人報告 · 中位參考價';
     if (ugcConfirms == 2) return '2 人報告 · 仍可能有偏差';
@@ -109,6 +156,7 @@ class Park {
 
   /// Optional hint for a 1-report price (shown as tooltip).
   String? get trustTooltip {
+    if (isSeedDemoPrice) return '示範價，以閘口為準';
     if (hasPrice && ugcConfirms == 1) return '僅供參考';
     return null;
   }
@@ -126,6 +174,7 @@ class Park {
   String get freshnessLabel {
     final ago = freshnessAgoLabel;
     if (ago.isEmpty) {
+      if (isSeedDemoPrice) return '示範價 · 未核實';
       return ugcConfirms > 0 ? '$ugcConfirms 人報告' : '未有人更新';
     }
     final who = ugcConfirms > 0 ? ' · $ugcConfirms 人' : '';
@@ -140,6 +189,10 @@ class Park {
     DateTime? priceUpdatedAt,
     String? source,
     String? priceNote,
+    PriceVerificationStatus? priceVerificationStatus,
+    DateTime? priceVerifiedAt,
+    PriceProvenance? priceProvenance,
+    bool clearPriceVerifiedAt = false,
   }) {
     return Park(
       id: id,
@@ -155,6 +208,12 @@ class Park {
       priceUpdatedAt: priceUpdatedAt ?? this.priceUpdatedAt,
       source: source ?? this.source,
       priceNote: priceNote ?? this.priceNote,
+      priceVerificationStatus:
+          priceVerificationStatus ?? this.priceVerificationStatus,
+      priceVerifiedAt: clearPriceVerifiedAt
+          ? null
+          : (priceVerifiedAt ?? this.priceVerifiedAt),
+      priceProvenance: priceProvenance ?? this.priceProvenance,
     );
   }
 
@@ -172,10 +231,15 @@ class Park {
         'priceUpdatedAt': priceUpdatedAt?.toUtc().toIso8601String(),
         'source': source,
         'priceNote': priceNote,
+        'priceVerificationStatus':
+            verificationStatusToJson(priceVerificationStatus),
+        'priceVerifiedAt': priceVerifiedAt?.toUtc().toIso8601String(),
+        'priceProvenance': priceProvenanceToJson(priceProvenance),
       };
 
   factory Park.fromJson(Map<String, dynamic> m) {
     final updated = m['priceUpdatedAt'] ?? m['price_updated_at'];
+    final verified = m['priceVerifiedAt'] ?? m['price_verified_at'];
     return Park(
       id: m['id'] as String? ?? 'unknown',
       name: prettyParkName(m['name'] as String? ?? '停車場'),
@@ -190,6 +254,14 @@ class Park {
       priceUpdatedAt: updated != null ? DateTime.tryParse('$updated') : null,
       source: m['source'] as String? ?? 'osm',
       priceNote: '${m['priceNote'] ?? m['price_note'] ?? ''}'.trim(),
+      priceVerificationStatus: parseVerificationStatus(
+        m['priceVerificationStatus'] ?? m['price_verification_status'],
+      ),
+      priceVerifiedAt:
+          verified != null ? DateTime.tryParse('$verified') : null,
+      priceProvenance: parsePriceProvenance(
+        m['priceProvenance'] ?? m['price_provenance'],
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
+import 'package:recordo/features/parks/price_verification.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/parks/sync_rules.dart';
@@ -130,6 +131,13 @@ class ParkRepository {
     );
   }
 
+  PriceVerificationStatus _mergeVerification(Park old, Park incoming) {
+    if (old.priceVerificationStatus == PriceVerificationStatus.verified) {
+      return PriceVerificationStatus.verified;
+    }
+    return incoming.priceVerificationStatus;
+  }
+
   void _mergePricePatch(List<Park> patch) {
     final byId = {for (final p in _catalog ?? const <Park>[]) p.id: p};
     for (final n in patch) {
@@ -146,6 +154,11 @@ class ParkRepository {
         priceUpdatedAt: n.priceUpdatedAt,
         priceNote: n.priceNote,
         source: n.source,
+        priceVerificationStatus: _mergeVerification(old, n),
+        priceVerifiedAt: n.priceVerifiedAt ?? old.priceVerifiedAt,
+        priceProvenance: n.priceProvenance != PriceProvenance.unknown
+            ? n.priceProvenance
+            : old.priceProvenance,
       );
     }
     _catalog = byId.values.toList();
@@ -244,9 +257,11 @@ class ParkRepository {
             dailyHkd: s.dailyHkd,
             nightHkd: s.nightHkd,
             heightM: s.heightM ?? o.heightM,
-            ugcConfirms: s.ugcConfirms,
-            priceUpdatedAt: s.priceUpdatedAt,
             source: 'seed+osm',
+            priceProvenance: s.priceProvenance,
+            priceVerificationStatus: s.priceVerificationStatus,
+            priceVerifiedAt: s.priceVerifiedAt,
+            priceNote: s.priceNote,
           ),
         );
       } else {
@@ -299,6 +314,9 @@ class ParkRepository {
     DateTime? updated = p.priceUpdatedAt;
     var source = p.source;
     var priceNote = p.priceNote;
+    var verification = p.priceVerificationStatus;
+    var verifiedAt = p.priceVerifiedAt;
+    var provenance = p.priceProvenance;
 
     if (localRaw is Map) {
       final m = Map<String, dynamic>.from(localRaw);
@@ -318,6 +336,10 @@ class ParkRepository {
         final n = m['priceNote'] as String?;
         if (n != null && n.trim().isNotEmpty) priceNote = n.trim();
         source = p.source.startsWith('ugc') ? p.source : 'ugc';
+        provenance = PriceProvenance.ugc;
+        if (verification != PriceVerificationStatus.verified) {
+          verification = PriceVerificationStatus.unverified;
+        }
       }
     }
 
@@ -329,6 +351,9 @@ class ParkRepository {
       priceUpdatedAt: updated,
       source: source,
       priceNote: priceNote,
+      priceVerificationStatus: verification,
+      priceVerifiedAt: verifiedAt,
+      priceProvenance: provenance,
     );
   }
 

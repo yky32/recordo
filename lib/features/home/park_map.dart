@@ -344,7 +344,13 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     }
     // OSM duplicates stacked on one lot — pick a park instead of fighting zoom.
     if (clusterSpanM(c) < 28) {
-      final pick = c.parks.firstWhere((p) => p.hasPrice, orElse: () => c.primary);
+      final pick = c.parks.firstWhere(
+        (p) => p.isVerifiedPrice,
+        orElse: () => c.parks.firstWhere(
+          (p) => p.hasUgcReports,
+          orElse: () => c.primary,
+        ),
+      );
       widget.onSelect?.call(pick.id);
       return;
     }
@@ -392,12 +398,14 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       }
       final p = c.primary;
       final selected = p.id == widget.selectedId;
+      final showChip = selected || p.showAsMapPriceChip;
       final marker = Marker(
         point: LatLng(p.lat, p.lng),
-        width: selected ? 160 : (p.hasPrice ? 72 : 32),
-        height: selected ? 78 : (p.hasPrice ? 36 : 32),
-        alignment: p.hasPrice || selected ? Alignment.bottomCenter : Alignment.center,
-        child: selected || p.hasPrice
+        width: selected ? 160 : (showChip ? 72 : 32),
+        height: selected ? 78 : (showChip ? 36 : 32),
+        alignment:
+            showChip || selected ? Alignment.bottomCenter : Alignment.center,
+        child: showChip
             ? ParkPriceChip(
                 park: p,
                 selected: selected,

@@ -10,6 +10,7 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
+import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
@@ -45,7 +46,10 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measureChrome());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureChrome();
+      if (mounted) showWedgeExplainerIfNeeded(context);
+    });
   }
 
   void _setSheetExtent(double value, double min) {
@@ -253,13 +257,13 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                 children: [
                   ParkMap(
                     key: _mapKey,
-                    parks: catalog.parks,
+                    parks: catalog.allWindowParks,
                     selectedId: catalog.selectedId,
                     bandTopY: _bandTopY,
                     bandBottomY: _bandBottomY,
                     onSelect: (id) {
                       hideKeyboard();
-                      _selectAndAnchor(id, catalog.parks);
+                      _selectAndAnchor(id, catalog.allWindowParks);
                     },
                     onMapInteraction: hideKeyboard,
                     onUserLocation: (ll) => context
@@ -411,7 +415,11 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                             title: active == null ? '附近停車場' : '泊緊',
                             trailing: active != null
                                 ? '本月 HK\$${session.monthTotal.toStringAsFixed(0)}'
-                                : '${catalog.parks.length} 個附近',
+                                : catalog.isSearching
+                                    ? '${catalog.parks.length} 個結果'
+                                    : catalog.restParks.isEmpty
+                                        ? '${catalog.parks.length} 個附近'
+                                        : '${catalog.parks.length} 個有價 · ${catalog.restParks.length} 其他',
                             onUpdate: (d) =>
                                 _onHandleDragUpdate(d, sheetMin),
                             onEnd: (d) => _onHandleDragEnd(d, sheetMin),
@@ -435,9 +443,55 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                   physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics(),
                                   ),
-                                  itemCount: catalog.parks.length,
+                                  itemCount: _sheetItemCount(catalog),
                                   itemBuilder: (context, i) {
-                                    final park = catalog.parks[i];
+                                    final entry = _sheetEntry(catalog, i);
+                                    if (entry.isHeader) {
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8),
+                                        child: Material(
+                                          color: UberColors.elevated,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            onTap: () => context
+                                                .read<ParkCatalogCubit>()
+                                                .toggleRestParks(),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 12,
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      catalog.showRestParks
+                                                          ? '收起其他停車位'
+                                                          : '顯示其他停車位（${catalog.restParks.length}）',
+                                                      style: RType.body(),
+                                                    ),
+                                                  ),
+                                                  Icon(
+                                                    catalog.showRestParks
+                                                        ? Icons
+                                                            .expand_less_rounded
+                                                        : Icons
+                                                            .expand_more_rounded,
+                                                    color: UberColors.muted,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    final park = entry.park!;
                                     final on =
                                         park.id == catalog.selectedId;
                                     final dm = context
@@ -454,7 +508,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                             .formatDistance(dm),
                                         onTap: () => _selectAndAnchor(
                                           park.id,
-                                          catalog.parks,
+                                          catalog.allWindowParks,
                                         ),
                                         onOpenDetail: () => context.push(
                                           parkDetailLocation(park.id),
@@ -746,6 +800,39 @@ class _RoundIcon extends StatelessWidget {
   }
 }
 
+class _SheetEntry {
+  const _SheetEntry.header() : park = null, isHeader = true;
+  const _SheetEntry.park(this.park) : isHeader = false;
+  final Park? park;
+  final bool isHeader;
+}
+
+int _sheetItemCount(ParkCatalogState catalog) {
+  final featured = catalog.parks.length;
+  if (catalog.isSearching || catalog.restParks.isEmpty) {
+    return featured;
+  }
+  final header = 1;
+  final rest = catalog.showRestParks ? catalog.restParks.length : 0;
+  return featured + header + rest;
+}
+
+_SheetEntry _sheetEntry(ParkCatalogState catalog, int index) {
+  final featured = catalog.parks;
+  if (index < featured.length) {
+    return _SheetEntry.park(featured[index]);
+  }
+  var j = index - featured.length;
+  if (!catalog.isSearching && catalog.restParks.isNotEmpty) {
+    if (j == 0) return const _SheetEntry.header();
+    j -= 1;
+    if (catalog.showRestParks) {
+      return _SheetEntry.park(catalog.restParks[j]);
+    }
+  }
+  throw RangeError.index(index, featured, 'sheet index');
+}
+
 class _ParkTile extends StatelessWidget {
   const _ParkTile({
     required this.park,
@@ -808,8 +895,20 @@ class _ParkTile extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Text(
-                    '未有價',
-                    style: RType.label().copyWith(color: UberColors.accent),
+                    park.priceBadgeLabel,
+                    style: RType.label().copyWith(
+                      color: park.isVerifiedPrice
+                          ? UberColors.accent
+                          : UberColors.muted,
+                    ),
+                  ),
+                )
+              else if (park.isSeedDemoPrice)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    park.priceBadgeLabel,
+                    style: RType.label().copyWith(color: UberColors.muted),
                   ),
                 ),
               IconButton(

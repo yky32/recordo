@@ -24,7 +24,10 @@ List<ParkCluster> clusterParks({
 }) {
   if (parks.isEmpty) return const [];
 
-  bool keep(Park p) => p.hasPrice || p.id == keepSeparateId;
+  bool keep(Park p) =>
+      p.isVerifiedPrice ||
+      (p.hasPrice && p.hasUgcReports) ||
+      p.id == keepSeparateId;
   final featured = parks.where(keep).toList();
   final rest = parks.where((p) => !keep(p)).toList();
 
