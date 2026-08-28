@@ -57,16 +57,12 @@ class ParkCatalogState {
 
   Park? get selected {
     if (selectedId == null) return null;
-    try {
-      return parks.firstWhere((e) => e.id == selectedId);
-    } catch (_) {
-      if (showRestParks) {
-        try {
-          return restParks.firstWhere((e) => e.id == selectedId);
-        } catch (_) {}
-      }
-      return null;
+    for (final list in [parks, restParks]) {
+      try {
+        return list.firstWhere((e) => e.id == selectedId);
+      } catch (_) {}
     }
+    return null;
   }
 
   ParkCatalogState copyWith({
@@ -146,6 +142,17 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   }
 
   void select(String? id) => emit(state.copyWith(selectedId: id));
+
+  /// Map pin tap — keep selection and expand collapsed rows when needed.
+  void selectFromMap(String id) {
+    final inRest = state.restParks.any((p) => p.id == id);
+    emit(
+      state.copyWith(
+        selectedId: id,
+        showRestParks: inRest ? true : state.showRestParks,
+      ),
+    );
+  }
 
   void setQuery(String q) {
     final piped = _pipeline(_repo.allWithUgc(), query: q);

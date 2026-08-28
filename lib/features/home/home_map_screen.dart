@@ -30,6 +30,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   final _sheetKey = GlobalKey();
   /// Keys so map pin select can [Scrollable.ensureVisible] the list row.
   final _itemKeys = <String, GlobalKey>{};
+  final _listScroll = ScrollController();
 
   /// Sheet height as a fraction of screen. Only the handle drags this.
   final _sheetExtent = ValueNotifier<double>(_sheetInit);
@@ -163,7 +164,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Future<void> _selectAndAnchor(String id, List<Park> parks) async {
     if (!mounted) return;
     final cubit = context.read<ParkCatalogCubit>();
-    cubit.select(id);
+    cubit.selectFromMap(id);
 
     const targetSheet = 0.52;
     if (_sheetExtent.value < targetSheet - 0.02) {
@@ -173,43 +174,64 @@ class _HomeMapScreenState extends State<HomeMapScreen>
       );
     }
 
-    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await _afterFrames(2);
     if (!mounted) return;
 
     _readBand(applyNow: true);
-    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await _afterFrames(1);
     if (!mounted) return;
     _mapKey.currentState?.centerOnSelected();
 
-    final ctx = _keyForPark(id).currentContext;
-    if (ctx != null && ctx.mounted) {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
-        alignment: 0.12,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-      );
-      return;
-    }
+    await _scrollListToPark(cubit.state, id);
+    if (!mounted) return;
+    await _ensureParkRowVisible(id);
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+  Future<void> _afterFrames(int count) async {
+    for (var i = 0; i < count; i++) {
       if (!mounted) return;
-      final ctx2 = _keyForPark(id).currentContext;
-      if (ctx2 != null && ctx2.mounted) {
-        await Scrollable.ensureVisible(
-          ctx2,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-          alignment: 0.12,
-        );
-      }
-    });
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
+  Future<void> _scrollListToPark(ParkCatalogState catalog, String id) async {
+    if (!_listScroll.hasClients) return;
+    final index = _sheetIndexForPark(catalog, id);
+    if (index == null) return;
+
+    var offset = 0.0;
+    for (var i = 0; i < index; i++) {
+      offset += _sheetRowExtent(_sheetEntry(catalog, i));
+    }
+    final max = _listScroll.position.maxScrollExtent;
+    await _listScroll.animateTo(
+      offset.clamp(0, max),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _ensureParkRowVisible(String id) async {
+    final ctx = _keyForPark(id).currentContext;
+    if (ctx == null || !ctx.mounted) {
+      await _afterFrames(1);
+      if (!mounted) return;
+    }
+    final target = _keyForPark(id).currentContext;
+    if (target == null || !target.mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: 0.12,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+    );
   }
 
   @override
   void dispose() {
     _sheetAnim?.dispose();
+    _listScroll.dispose();
     _sheetExtent.dispose();
     _bandTopY.dispose();
     _bandBottomY.dispose();
@@ -428,6 +450,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                             child: Stack(
                               children: [
                                 ListView.builder(
+                                  controller: _listScroll,
                                   primary: false,
                                   padding: EdgeInsets.fromLTRB(
                                     16,
@@ -815,6 +838,20 @@ int _sheetItemCount(ParkCatalogState catalog) {
   final header = 1;
   final rest = catalog.showRestParks ? catalog.restParks.length : 0;
   return featured + header + rest;
+}
+
+int? _sheetIndexForPark(ParkCatalogState catalog, String id) {
+  final featuredIndex = catalog.parks.indexWhere((p) => p.id == id);
+  if (featuredIndex >= 0) return featuredIndex;
+  if (catalog.isSearching || catalog.restParks.isEmpty) return null;
+  final restIndex = catalog.restParks.indexWhere((p) => p.id == id);
+  if (restIndex < 0 || !catalog.showRestParks) return null;
+  return catalog.parks.length + 1 + restIndex;
+}
+
+double _sheetRowExtent(_SheetEntry entry) {
+  if (entry.isHeader) return 52;
+  return 76;
 }
 
 _SheetEntry _sheetEntry(ParkCatalogState catalog, int index) {
