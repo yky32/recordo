@@ -7,6 +7,7 @@ import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
@@ -55,14 +56,29 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
         );
     HapticFeedback.lightImpact();
     if (context.mounted) {
+      final updated = context.read<ParkCatalogCubit>().parkById(p.id);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            cloud
-                ? '多謝 · 已確認，並分享到雲端'
-                : '多謝 · 已確認（本機 · 稍後有網會再同步）',
+            ContributionCopy.priceConfirm(cloud: cloud, park: updated),
           ),
         ),
+      );
+    }
+  }
+
+  Future<void> _sharePark(BuildContext context, Park p) async {
+    final lines = <String>[
+      p.name,
+      if (p.district.isNotEmpty) p.district,
+      if (p.hasPrice) p.priceSummary else '未有收費',
+      'https://maps.google.com/?q=${p.lat},${p.lng}',
+    ];
+    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    HapticFeedback.lightImpact();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已複製場資料 · 可以分享俾朋友')),
       );
     }
   }
@@ -104,12 +120,11 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
       HapticFeedback.mediumImpact();
       if (context.mounted) {
         setState(() => _editing = false);
+        final updated = context.read<ParkCatalogCubit>().parkById(p.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              cloud
-                  ? '已更新場價 · 已分享給其他 Recordo 用戶'
-                  : '已更新場價（本機 · 連雲端失敗或未設定）',
+              ContributionCopy.priceReport(cloud: cloud, park: updated),
             ),
           ),
         );
@@ -324,6 +339,23 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               ParkNavigation.showChooser(context, p),
                           icon: const Icon(Icons.directions_rounded),
                           label: const Text('開始導航'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: UberColors.white,
+                            side: BorderSide(color: UberColors.hairline),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          onPressed: () => _sharePark(context, p),
+                          icon: const Icon(Icons.ios_share_rounded, size: 18),
+                          label: const Text('分享呢個場'),
                         ),
                       ),
                       const SizedBox(height: 12),

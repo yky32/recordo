@@ -10,6 +10,7 @@ import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/parks/park_repository.dart';
+import 'package:recordo/features/session/remind_log_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uber-style settings hub.
@@ -209,14 +210,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _ToggleRow(
                 icon: Icons.notifications_none_rounded,
                 title: '提醒記低泊車',
-                subtitle: '之後版本 · 而家預留',
+                subtitle: '泊車約 90 分鐘後提醒你填收費',
                 value: _remindLog,
-                onChanged: (v) {
+                onChanged: (v) async {
                   setState(() => _remindLog = v);
-                  _setBool(StorageKeys.prefRemindLog, v);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('通知稍後版本先上')),
-                  );
+                  await _setBool(StorageKeys.prefRemindLog, v);
+                  if (!context.mounted) return;
+                  if (v) {
+                    await RemindLogService.instance.init();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已開 · 泊車後會提醒你填收費')),
+                    );
+                  } else {
+                    await RemindLogService.instance.cancel();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('已關閉提醒')),
+                    );
+                  }
                 },
               ),
             ],
@@ -398,8 +410,8 @@ class _UpdatePriceHowToSheet extends StatelessWidget {
     ),
     (
       Icons.timer_outlined,
-      '泊完順手更新',
-      '結束計時填實付 HK\$ · 會寫入最近實付，其他人更有用',
+      '泊完順手分享',
+      '結束計時填實付 HK\$ · 分享金額同時間 · 唔會改場價',
     ),
   ];
 

@@ -25,5 +25,11 @@ abstract final class RecordoSupabase {
       ),
     );
     _ready = true;
+    try {
+      final client = Supabase.instance.client;
+      if (client.auth.currentSession == null) {
+        await client.auth.signInAnonymously();
+      }
+    } catch (_) {}
   }
 }
