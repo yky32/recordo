@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:recordo/core/location/user_location.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
 
@@ -284,6 +285,10 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     double? night,
     String? priceNote,
     bool confirmOnly = false,
+    int? unitMinutes,
+    double? unitAmount,
+    double? offpeakAmount,
+    ParkTariff? tariff,
   }) async {
     final cloud = await _repo.reportPrice(
       parkId: parkId,
@@ -292,6 +297,10 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       night: night,
       priceNote: priceNote,
       confirmOnly: confirmOnly,
+      unitMinutes: unitMinutes,
+      unitAmount: unitAmount,
+      offpeakAmount: offpeakAmount,
+      tariff: tariff,
     );
     _emitCatalog();
     select(parkId);

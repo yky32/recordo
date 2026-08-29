@@ -95,6 +95,9 @@ class Park {
   bool get isVerifiedPrice =>
       hasPrice && priceVerificationStatus == PriceVerificationStatus.verified;
 
+  bool get isOperatorOfficial =>
+      isVerifiedPrice && priceProvenance == PriceProvenance.operator;
+
   bool get isSeedDemoPrice =>
       hasPrice &&
       !isVerifiedPrice &&

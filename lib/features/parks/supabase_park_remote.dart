@@ -242,6 +242,9 @@ class SupabaseParkRemote {
     double? night,
     String? priceNote,
     bool confirmOnly = false,
+    int? unitMinutes,
+    double? unitAmount,
+    double? offpeakAmount,
   }) async {
     final c = RecordoSupabase.client;
     if (c == null) return false;
@@ -254,6 +257,9 @@ class SupabaseParkRemote {
         'night_hkd': night,
         'price_note': priceNote,
         'confirm_only': confirmOnly,
+        'unit_minutes': ?unitMinutes,
+        'unit_amount': ?unitAmount,
+        'offpeak_amount': ?offpeakAmount,
       });
       return true;
     } catch (_) {

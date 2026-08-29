@@ -1,5 +1,9 @@
 /// Server-aligned clamps for UGC prices (HK parking sanity).
 abstract final class PriceGuard {
+  static const unitMinutesMin = 5;
+  static const unitMinutesMax = 180;
+  static const unitAmountMin = 1.0;
+  static const unitAmountMax = 250.0;
   static const hourlyMin = 1.0;
   static const hourlyMax = 500.0;
   static const dailyMin = 10.0;
@@ -43,11 +47,22 @@ abstract final class PriceGuard {
     double? night,
     String? note,
     bool confirmOnly = false,
+    int? unitMinutes,
+    double? unitAmount,
   }) {
+    if (unitMinutes != null &&
+        (unitMinutes < unitMinutesMin || unitMinutes > unitMinutesMax)) {
+      return '計費單位請介乎 $unitMinutesMin–$unitMinutesMax 分鐘';
+    }
+    if (unitAmount != null &&
+        (unitAmount < unitAmountMin || unitAmount > unitAmountMax)) {
+      return '每段收費請介乎 HK\$${unitAmountMin.toInt()}–${unitAmountMax.toInt()}';
+    }
     if (!confirmOnly &&
         hourly == null &&
         daily == null &&
         night == null &&
+        unitAmount == null &&
         (note == null || note.trim().isEmpty)) {
       return '請至少填一個價錢或備註';
     }

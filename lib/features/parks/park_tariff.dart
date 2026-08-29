@@ -17,7 +17,11 @@ class ParkTariff {
   /// ISO 4217. Never bake currency into JSON keys (`spend` not `spendHkd`).
   final String currency;
 
-  String get unitLabel => unitMinutes == 30 ? '半小時' : '小時';
+  String get unitLabel {
+    if (unitMinutes == 60) return '小時';
+    if (unitMinutes == 30) return '半小時';
+    return '$unitMinutes 分鐘';
+  }
 
   double get _perHourFactor => 60 / unitMinutes;
 
@@ -63,6 +67,7 @@ class ParkTariff {
     if (raw is! Map) return null;
     final m = Map<String, dynamic>.from(raw);
     final unit = jsonIntSafe(m['unitMinutes'] ?? m['unit_minutes'], 30);
+    if (!isValidBillingUnit(unit)) return null;
     final bandsRaw = m['bands'];
     if (bandsRaw is! List || bandsRaw.isEmpty) return null;
     final bands = <TariffBand>[];
@@ -82,7 +87,7 @@ class ParkTariff {
       }
     }
     return ParkTariff(
-      unitMinutes: unit == 60 ? 60 : 30,
+      unitMinutes: unit,
       bands: bands,
       validations: vals,
       sourceName: '${m['sourceName'] ?? m['source_name'] ?? ''}'.trim().isEmpty
@@ -297,3 +302,47 @@ Map<String, dynamic> timesSquareTariffJson() => {
         {'days': 'sat-sun-ph', 'spend': 300, 'freeHours': 2},
       ],
     };
+
+/// Common HK billing slices. Not only 30 vs 60.
+const kBillingUnitChoices = [15, 20, 30, 60];
+
+bool isValidBillingUnit(int minutes) => minutes >= 5 && minutes <= 180;
+
+double? hourlyFromUnitAmount(double amount, int unitMinutes) {
+  if (!isValidBillingUnit(unitMinutes) || amount <= 0) return null;
+  return amount * (60 / unitMinutes);
+}
+
+String billingUnitLabel(int minutes) {
+  if (minutes == 60) return '1 小時';
+  if (minutes == 30) return '30 分';
+  return '$minutes 分';
+}
+
+/// Driver-reported simple tariff (one peak, optional overnight).
+ParkTariff driverTariff({
+  required int unitMinutes,
+  required double peak,
+  double? offpeak,
+}) {
+  return ParkTariff(
+    unitMinutes: unitMinutes,
+    bands: [
+      TariffBand(
+        days: 'daily',
+        kind: 'peak',
+        start: '07:00',
+        end: '23:00',
+        amount: peak,
+      ),
+      if (offpeak != null)
+        TariffBand(
+          days: 'daily',
+          kind: 'offpeak',
+          start: '23:00',
+          end: '07:00',
+          amount: offpeak,
+        ),
+    ],
+  );
+}
