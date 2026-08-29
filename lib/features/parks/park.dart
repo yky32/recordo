@@ -1,5 +1,6 @@
 import 'package:recordo/features/parks/price_verification.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
+import 'package:recordo/features/parks/park_ev.dart';
 
 /// OSM often names unnamed lots `停車場 (underground)` — last letter clips in
 /// the list, and English type tags read poorly. Map to short HK copy.
@@ -63,6 +64,7 @@ class Park {
     this.priceVerifiedAt,
     this.priceProvenance = PriceProvenance.unknown,
     this.tariff,
+    this.ev,
   });
 
   final String id;
@@ -83,6 +85,7 @@ class Park {
   final DateTime? priceVerifiedAt;
   final PriceProvenance priceProvenance;
   final ParkTariff? tariff;
+  final ParkEv? ev;
 
   bool get hasPrice =>
       hourlyHkd != null ||
@@ -106,6 +109,8 @@ class Park {
           source == 'seed+osm');
 
   bool get hasUgcReports => ugcConfirms > 0;
+
+  bool get hasEvCharging => ev?.hasCharging == true;
 
   bool get showAsMapPriceChip => isVerifiedPrice || hasUgcReports;
 
@@ -215,6 +220,7 @@ class Park {
     DateTime? priceVerifiedAt,
     PriceProvenance? priceProvenance,
     ParkTariff? tariff,
+    ParkEv? ev,
     bool clearPriceVerifiedAt = false,
   }) {
     return Park(
@@ -238,6 +244,7 @@ class Park {
           : (priceVerifiedAt ?? this.priceVerifiedAt),
       priceProvenance: priceProvenance ?? this.priceProvenance,
       tariff: tariff ?? this.tariff,
+      ev: ev ?? this.ev,
     );
   }
 
@@ -260,6 +267,7 @@ class Park {
         'priceVerifiedAt': priceVerifiedAt?.toUtc().toIso8601String(),
         'priceProvenance': priceProvenanceToJson(priceProvenance),
         if (tariff != null) 'tariff': tariff!.toJson(),
+        if (ev != null) 'ev': ev!.toJson(),
       };
 
   factory Park.fromJson(Map<String, dynamic> m) {
@@ -288,6 +296,7 @@ class Park {
         m['priceProvenance'] ?? m['price_provenance'],
       ),
       tariff: ParkTariff.tryParse(m['tariff']),
+      ev: ParkEv.tryParse(m['ev']),
     );
   }
 }

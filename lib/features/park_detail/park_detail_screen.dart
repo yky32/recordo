@@ -12,6 +12,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
+import 'package:recordo/features/parks/park_ev.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -360,6 +361,12 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                                 _TariffCard(tariff: p.tariff!)
                               else
                                 _PriceBreakdown(park: p),
+                            ],
+                            if (p.hasEvCharging) ...[
+                              const SizedBox(height: 12),
+                              Divider(height: 1, color: UberColors.hairline),
+                              const SizedBox(height: 12),
+                              _EvCard(ev: p.ev!),
                             ],
                             if (p.hasPriceNote && p.tariff == null) ...[
                               const SizedBox(height: 12),
@@ -779,6 +786,38 @@ class _TariffCard extends StatelessWidget {
             const SizedBox(height: 4),
           ],
         ],
+      ],
+    );
+  }
+}
+
+class _EvCard extends StatelessWidget {
+  const _EvCard({required this.ev});
+  final ParkEv ev;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.bolt_rounded, size: 16, color: UberColors.accent),
+            const SizedBox(width: 4),
+            Text('充電', style: RType.label()),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final c in ev.connectors) ...[
+          Text(c.line, style: RType.muted()),
+          const SizedBox(height: 4),
+        ],
+        for (final b in ev.billing) ...[
+          Text(b.line, style: RType.body()),
+          const SizedBox(height: 4),
+        ],
+        if (ev.billing.any((e) => e.model == 'bundledWithParking'))
+          Text('連充電價唔計入時租 chip', style: RType.muted()),
       ],
     );
   }

@@ -369,7 +369,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       final showChip = selected || p.showAsMapPriceChip;
       final marker = Marker(
         point: LatLng(p.lat, p.lng),
-        width: selected ? 160 : (showChip ? 72 : 32),
+        width: selected ? 160 : (showChip ? (p.hasEvCharging ? 86 : 72) : 32),
         height: selected ? 78 : (showChip ? 36 : 32),
         alignment:
             showChip || selected ? Alignment.bottomCenter : Alignment.center,

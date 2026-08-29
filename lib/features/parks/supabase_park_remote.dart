@@ -55,7 +55,7 @@ class SupabaseParkRemote {
         var q = c
             .from('parks')
             .select(
-              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance,tariff',
+              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance,tariff,ev',
             )
             .not('price_updated_at', 'is', null);
         if (since != null) {
@@ -88,7 +88,7 @@ class SupabaseParkRemote {
         final rows = await c
             .from('parks')
             .select(
-              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance,tariff',
+              'id,name,district,lat,lng,height_m,hourly_hkd,daily_hkd,night_hkd,price_note,ugc_confirms,price_updated_at,source,price_verification_status,price_verified_at,price_provenance,tariff,ev',
             )
             .order('id')
             .range(from, from + page - 1);

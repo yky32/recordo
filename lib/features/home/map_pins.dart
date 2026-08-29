@@ -194,15 +194,24 @@ class ParkPriceChip extends StatelessWidget {
                 ),
               ],
             ),
-            child: Text(
-              label.isEmpty ? 'P' : label,
-              style: TextStyle(
-                color: fg,
-                fontSize: selected ? 13 : 11,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-                letterSpacing: -0.2,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (park.hasEvCharging) ...[
+                  Icon(Icons.bolt_rounded, size: selected ? 14 : 12, color: fg),
+                  SizedBox(width: selected ? 3 : 2),
+                ],
+                Text(
+                  label.isEmpty ? 'P' : label,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: selected ? 13 : 11,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
             ),
           ),
           CustomPaint(
