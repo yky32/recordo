@@ -35,4 +35,29 @@ void main() {
     expect(again.tariff!.weekdayPeakHourly, 36);
     expect(again.priceBadgeLabel, '官方牌價');
   });
+
+  test('Lee Garden days: Mon-Thu vs Fri-Sun+PH', () {
+    expect(tariffDaysLabel('mon-thu'), '星期一至四（公眾假期除外）');
+    expect(tariffDaysLabel('fri-sun-ph'), '星期五、六、日及公眾假期');
+    final t = ParkTariff.tryParse({
+      'unitMinutes': 30,
+      'bands': [
+        {
+          'days': 'daily',
+          'kind': 'peak',
+          'start': '07:00',
+          'end': '23:00',
+          'amount': 18,
+        },
+      ],
+      'validations': [
+        {'days': 'mon-thu', 'spendHkd': 400, 'freeHours': 3},
+        {'days': 'fri-sun-ph', 'spendHkd': 600, 'freeHours': 3},
+      ],
+    });
+    expect(t!.validations[0].line, contains('星期一至四'));
+    expect(t.validations[0].line, contains('400'));
+    expect(t.validations[1].line, contains('星期五、六、日'));
+    expect(t.validations[1].line, contains('600'));
+  });
 }
