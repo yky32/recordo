@@ -121,25 +121,27 @@ class Park {
     return '未有價';
   }
 
+  String get currency => tariff?.currency ?? 'HKD';
+
   /// List / hero line — median-style display with report count when known.
   String get priceSummary {
     if (hourlyHkd != null) {
-      final x = hourlyHkd!.toStringAsFixed(0);
-      if (isVerifiedPrice) return '約 HK\$$x/時 · $verifiedTag';
-      if (ugcConfirms >= 2) return '約 HK\$$x/時 · $ugcConfirms 人';
-      if (ugcConfirms == 1) return '約 HK\$$x/時 · 1 人';
-      if (isSeedDemoPrice) return '約 HK\$$x/時 · 未核實';
-      return '約 HK\$$x/時';
+      final x = moneyLabel(hourlyHkd!, currency);
+      if (isVerifiedPrice) return '約 $x/時 · $verifiedTag';
+      if (ugcConfirms >= 2) return '約 $x/時 · $ugcConfirms 人';
+      if (ugcConfirms == 1) return '約 $x/時 · 1 人';
+      if (isSeedDemoPrice) return '約 $x/時 · 未核實';
+      return '約 $x/時';
     }
     if (dailyHkd != null) {
-      final x = dailyHkd!.toStringAsFixed(0);
-      if (isVerifiedPrice) return '約 HK\$$x/日 · 場內核實';
-      if (ugcConfirms >= 2) return '約 HK\$$x/日 · $ugcConfirms 人';
-      if (isSeedDemoPrice) return '約 HK\$$x/日 · 未核實';
-      return '約 HK\$$x/日';
+      final x = moneyLabel(dailyHkd!, currency);
+      if (isVerifiedPrice) return '約 $x/日 · 場內核實';
+      if (ugcConfirms >= 2) return '約 $x/日 · $ugcConfirms 人';
+      if (isSeedDemoPrice) return '約 $x/日 · 未核實';
+      return '約 $x/日';
     }
     if (nightHkd != null) {
-      final base = '夜泊約 HK\$${nightHkd!.toStringAsFixed(0)}';
+      final base = '夜泊約 ${moneyLabel(nightHkd!, currency)}';
       if (isVerifiedPrice) return '$base · 場內核實';
       if (isSeedDemoPrice) return '$base · 未核實';
       return base;

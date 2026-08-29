@@ -12,7 +12,7 @@ void main() {
     expect(t.weekdayOffpeakHourly, 16);
     expect(t.bands, hasLength(4));
     expect(t.validations, hasLength(3));
-    expect(t.validations[1].line, contains('16:00'));
+    expect(t.validations[1].line(), contains('16:00'));
   });
 
   test('operator verified park shows 官方牌價 not 司機報價', () {
@@ -55,9 +55,36 @@ void main() {
         {'days': 'fri-sun-ph', 'spendHkd': 600, 'freeHours': 3},
       ],
     });
-    expect(t!.validations[0].line, contains('星期一至四'));
-    expect(t.validations[0].line, contains('400'));
-    expect(t.validations[1].line, contains('星期五、六、日'));
-    expect(t.validations[1].line, contains('600'));
+    expect(t!.validations[0].line(), contains('星期一至四'));
+    expect(t.validations[0].line(), contains('400'));
+    expect(t.validations[1].line(), contains('星期五、六、日'));
+    expect(t.validations[1].line(), contains('600'));
+    expect(t.toJson()['validations'][0], isNot(contains('spendHkd')));
+    expect(t.toJson()['validations'][0]['spend'], 400);
+  });
+
+  test('currency is a field, not baked into keys', () {
+    expect(moneyLabel(24, 'HKD'), 'HK\$24');
+    expect(moneyLabel(60, 'TWD'), 'NT\$60');
+    final tw = ParkTariff.tryParse({
+      'unitMinutes': 60,
+      'currency': 'TWD',
+      'bands': [
+        {
+          'days': 'daily',
+          'kind': 'peak',
+          'start': '00:00',
+          'end': '24:00',
+          'amount': 40,
+        },
+      ],
+      'validations': [
+        {'days': 'daily', 'spend': 500, 'freeHours': 2},
+      ],
+    });
+    expect(tw!.currency, 'TWD');
+    expect(tw.toJson()['currency'], 'TWD');
+    expect(tw.validations.first.line(currency: tw.currency), contains('NT\$500'));
+    expect(tw.toJson()['validations'][0].containsKey('spendHkd'), isFalse);
   });
 }
