@@ -2,10 +2,10 @@
   "meta": {
     "wedge": "銅鑼灣 + 尖沙咀",
     "targetCount": 50,
-    "note": "Fill verified rows via scripts/import_wedge_verifications.py after gate check."
+    "note": "Fill verified rows via scripts/import_wedge_verifications.py after gate check. Live Times Square id is OSM node after seed merge."
   },
   "queue": [
-    {"parkId": "ts_causeway", "name": "時代廣場停車場", "district": "銅鑼灣", "status": "pending"},
+    {"parkId": "ts_causeway", "liveId": "osm:node/2987721138", "name": "時代廣場停車場", "district": "銅鑼灣", "status": "verified"},
     {"parkId": "lee_garden_1", "name": "利園一期停車場", "district": "銅鑼灣", "status": "pending"},
     {"parkId": "lee_garden_3", "name": "利園三期停車場", "district": "銅鑼灣", "status": "pending"},
     {"parkId": "vp_cwb", "name": "維多利亞公園停車場", "district": "銅鑼灣", "status": "pending"},
@@ -17,5 +17,17 @@
     {"parkId": "k11_art", "name": "K11 Art Mall 停車場", "district": "尖沙咀", "status": "pending"},
     {"parkId": "china_hk_city", "name": "中港城停車場", "district": "尖沙咀", "status": "pending"}
   ],
-  "verified": []
+  "verified": [
+    {
+      "parkId": "osm:node/2987721138",
+      "seedId": "ts_causeway",
+      "name": "時代廣場停車場",
+      "observedAt": "2026-08-28",
+      "source": "operator",
+      "hourlyHkd": 36,
+      "nightHkd": 16,
+      "priceNote": "時租按半小時計（時代廣場官方）。一至五 07:00–23:00 $18/半小時（約$36/時）；23:00–07:00 $8/半小時（約$16/時）。六日及公眾假期 07:00–23:00 $19/半小時（約$38/時）；23:00–07:00 $8/半小時。商場消費：一至五滿$300免3小時；日–五16:00後入車滿$200免3小時；假日滿$300免2小時。",
+      "note": "Official tariff is per 30 min. hourlyHkd/nightHkd are 2× half-hour rates for the simple hourly chip (weekday peak / off-peak). Weekend peak $38/hr is in the note only."
+    }
+  ]
 }
