@@ -122,4 +122,15 @@ void main() {
     expect(tariffDaysLabel('mon-sat'), contains('星期一至六'));
     expect(tariffDaysLabel('sun-ph'), contains('星期日'));
   });
+
+  test('20-minute billing maps to hourly chip', () {
+    expect(hourlyFromUnitAmount(10, 20), 30);
+    expect(hourlyFromUnitAmount(18, 30), 36);
+    expect(isValidBillingUnit(20), isTrue);
+    expect(isValidBillingUnit(4), isFalse);
+    final t = driverTariff(unitMinutes: 20, peak: 10, offpeak: 6);
+    expect(t.unitLabel, '20 分鐘');
+    expect(t.weekdayPeakHourly, 30);
+    expect(ParkTariff.tryParse(t.toJson())!.unitMinutes, 20);
+  });
 }

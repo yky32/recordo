@@ -29,6 +29,7 @@ class ParkDetailScreen extends StatefulWidget {
 
 class _ParkDetailScreenState extends State<ParkDetailScreen> {
   bool _editing = false;
+  int _unitMinutes = 60;
   final _hourly = TextEditingController();
   final _daily = TextEditingController();
   final _night = TextEditingController();
@@ -53,9 +54,19 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
   }
 
   void _prefill(Park p) {
-    _hourly.text = p.hourlyHkd?.toStringAsFixed(0) ?? '';
+    final t = p.tariff;
+    if (t != null) {
+      _unitMinutes = t.unitMinutes;
+      final peak = t.bands.where((b) => b.kind == 'peak').firstOrNull;
+      final off = t.bands.where((b) => b.kind == 'offpeak').firstOrNull;
+      _hourly.text = peak?.amount.toStringAsFixed(0) ?? '';
+      _night.text = off?.amount.toStringAsFixed(0) ?? '';
+    } else {
+      _unitMinutes = 60;
+      _hourly.text = p.hourlyHkd?.toStringAsFixed(0) ?? '';
+      _night.text = p.nightHkd?.toStringAsFixed(0) ?? '';
+    }
     _daily.text = p.dailyHkd?.toStringAsFixed(0) ?? '';
-    _night.text = p.nightHkd?.toStringAsFixed(0) ?? '';
     _note.text = p.priceNote;
   }
 
@@ -118,16 +129,31 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
       return double.tryParse(t);
     }
 
-    final hourly = parse(_hourly);
+    final unitAmount = parse(_hourly);
     final daily = parse(_daily);
-    final night = parse(_night);
+    final offpeak = parse(_night);
     final note = _note.text.trim();
+    final hourly = unitAmount == null
+        ? null
+        : hourlyFromUnitAmount(unitAmount, _unitMinutes);
+    final night = offpeak == null
+        ? null
+        : hourlyFromUnitAmount(offpeak, _unitMinutes);
+    final tariff = unitAmount == null
+        ? null
+        : driverTariff(
+            unitMinutes: _unitMinutes,
+            peak: unitAmount,
+            offpeak: offpeak,
+          );
 
     final err = PriceGuard.validateReport(
       hourly: hourly,
       daily: daily,
       night: night,
       note: note,
+      unitMinutes: _unitMinutes,
+      unitAmount: unitAmount,
     );
     if (err != null) {
       if (context.mounted) {
@@ -143,6 +169,10 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
             daily: daily,
             night: night,
             priceNote: note,
+            unitMinutes: _unitMinutes,
+            unitAmount: unitAmount,
+            offpeakAmount: offpeak,
+            tariff: tariff,
           );
       HapticFeedback.mediumImpact();
       if (context.mounted) {
@@ -429,13 +459,26 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                               child: _ActionHalf(
                                 icon: Icons.edit_outlined,
                                 title: '改價',
-                                subtitle: '時 / 日 / 夜 / 備註',
-                                onTap: () {
-                                  setState(() {
-                                    _editing = true;
-                                    _prefill(p);
-                                  });
-                                },
+                                subtitle: p.isOperatorOfficial
+                                    ? '官方牌 · 唔蓋'
+                                    : '單位 / 每段收費',
+                                onTap: p.isOperatorOfficial
+                                    ? () {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              '官方牌價唔會用改價覆蓋。有出入就報實付。',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    : () {
+                                        setState(() {
+                                          _editing = true;
+                                          _prefill(p);
+                                        });
+                                      },
                               ),
                             ),
                           ],
@@ -451,20 +494,64 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                       if (_editing) ...[
                         SizedBox(height: 18),
                         Text('更新收費', style: RType.titleSm()),
+                        const SizedBox(height: 8),
+                        Text('計費單位', style: RType.label()),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final m in {
+                              ...kBillingUnitChoices,
+                              if (!kBillingUnitChoices.contains(_unitMinutes))
+                                _unitMinutes,
+                            })
+                              GestureDetector(
+                                onTap: () =>
+                                    setState(() => _unitMinutes = m),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _unitMinutes == m
+                                        ? UberColors.accent
+                                            .withValues(alpha: 0.18)
+                                        : UberColors.sheet,
+                                    borderRadius: BorderRadius.circular(99),
+                                    border: Border.all(
+                                      color: _unitMinutes == m
+                                          ? UberColors.accent
+                                          : UberColors.hairline,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    billingUnitLabel(m),
+                                    style: RType.label().copyWith(
+                                      color: _unitMinutes == m
+                                          ? UberColors.accent
+                                          : UberColors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 12),
                         _field(
                           _hourly,
-                          '時租 HK\$（${PriceGuard.hourlyMin.toInt()}–${PriceGuard.hourlyMax.toInt()}）',
+                          '繁忙 HK\$ / 每${_unitMinutes == 60 ? '小時' : '$_unitMinutes 分鐘'}',
+                        ),
+                        const SizedBox(height: 10),
+                        _field(
+                          _night,
+                          '非繁忙 HK\$ / 每段（可空）',
                         ),
                         const SizedBox(height: 10),
                         _field(
                           _daily,
                           '日泊 HK\$（可空 · ${PriceGuard.dailyMin.toInt()}–${PriceGuard.dailyMax.toInt()}）',
-                        ),
-                        const SizedBox(height: 10),
-                        _field(
-                          _night,
-                          '夜泊 HK\$（可空 · ${PriceGuard.nightMin.toInt()}–${PriceGuard.nightMax.toInt()}）',
                         ),
                         const SizedBox(height: 10),
                         _field(

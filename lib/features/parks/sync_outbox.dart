@@ -161,6 +161,9 @@ class SyncOutbox {
       night: jsonDouble(p['night']),
       priceNote: p['priceNote'] as String?,
       confirmOnly: p['confirmOnly'] == true,
+      unitMinutes: p['unitMinutes'] is num ? (p['unitMinutes'] as num).toInt() : null,
+      unitAmount: jsonDouble(p['unitAmount']),
+      offpeakAmount: jsonDouble(p['offpeakAmount']),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/price_guard.dart';
 import 'package:recordo/features/parks/price_verification.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
@@ -318,6 +319,11 @@ class ParkRepository {
     var verification = p.priceVerificationStatus;
     var verifiedAt = p.priceVerifiedAt;
     var provenance = p.priceProvenance;
+    var tariff = p.tariff;
+
+    if (p.isOperatorOfficial) {
+      return p;
+    }
 
     if (localRaw is Map) {
       final m = Map<String, dynamic>.from(localRaw);
@@ -341,6 +347,8 @@ class ParkRepository {
         if (verification != PriceVerificationStatus.verified) {
           verification = PriceVerificationStatus.unverified;
         }
+        final localTariff = ParkTariff.tryParse(m['tariff']);
+        if (localTariff != null) tariff = localTariff;
       }
     }
 
@@ -355,6 +363,7 @@ class ParkRepository {
       priceVerificationStatus: verification,
       priceVerifiedAt: verifiedAt,
       priceProvenance: provenance,
+      tariff: tariff,
     );
   }
 
@@ -389,6 +398,10 @@ class ParkRepository {
     double? night,
     String? priceNote,
     bool confirmOnly = false,
+    int? unitMinutes,
+    double? unitAmount,
+    double? offpeakAmount,
+    ParkTariff? tariff,
   }) async {
     final err = PriceGuard.validateReport(
       hourly: hourly,
@@ -396,6 +409,8 @@ class ParkRepository {
       night: night,
       note: priceNote,
       confirmOnly: confirmOnly,
+      unitMinutes: unitMinutes,
+      unitAmount: unitAmount,
     );
     if (err != null) {
       throw ArgumentError(err);
@@ -424,6 +439,9 @@ class ParkRepository {
       'ugcConfirms': confirms,
       'priceUpdatedAt': DateTime.now().toUtc().toIso8601String(),
       'confirmOnly': confirmOnly,
+      'tariff': ?tariff?.toJson(),
+      'unitMinutes': ?unitMinutes,
+      'unitAmount': ?unitAmount,
     };
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, map);
 
@@ -443,6 +461,9 @@ class ParkRepository {
           'night': nightOut,
           'priceNote': noteOut.isEmpty ? null : noteOut,
           'confirmOnly': confirmOnly,
+          'unitMinutes': ?unitMinutes,
+          'unitAmount': ?unitAmount,
+          'offpeakAmount': ?offpeakAmount,
         },
       ),
     );
