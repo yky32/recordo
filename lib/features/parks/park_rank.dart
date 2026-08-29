@@ -19,7 +19,13 @@ int compareParksForDisplay(
   required double? centerLng,
   bool preferWedge = true,
 }) {
-  if (preferWedge) {
+  // 「附近」= 距離。Wedge 只喺未有定位（冷啟動 CWB demo）先用。
+  if (centerLat != null && centerLng != null) {
+    final da = Geolocator.distanceBetween(centerLat, centerLng, a.lat, a.lng);
+    final db = Geolocator.distanceBetween(centerLat, centerLng, b.lat, b.lng);
+    final cmp = da.compareTo(db);
+    if (cmp != 0) return cmp;
+  } else if (preferWedge) {
     final aw = isWedgeLot(a) ? 0 : 1;
     final bw = isWedgeLot(b) ? 0 : 1;
     if (aw != bw) return aw.compareTo(bw);
@@ -28,13 +34,6 @@ int compareParksForDisplay(
   final ta = parkDisplayTier(a);
   final tb = parkDisplayTier(b);
   if (ta != tb) return ta.compareTo(tb);
-
-  if (centerLat != null && centerLng != null) {
-    final da = Geolocator.distanceBetween(centerLat, centerLng, a.lat, a.lng);
-    final db = Geolocator.distanceBetween(centerLat, centerLng, b.lat, b.lng);
-    final cmp = da.compareTo(db);
-    if (cmp != 0) return cmp;
-  }
 
   final an = a.name == '停車場' ? 1 : 0;
   final bn = b.name == '停車場' ? 1 : 0;
@@ -55,9 +54,7 @@ int compareParksForDisplay(
   final featured = <Park>[];
   final rest = <Park>[];
   for (final p in sorted) {
-    if (parkDisplayTier(p) <= 2 && isWedgeLot(p)) {
-      featured.add(p);
-    } else if (parkDisplayTier(p) <= 1) {
+    if (parkDisplayTier(p) <= 2) {
       featured.add(p);
     } else {
       rest.add(p);
