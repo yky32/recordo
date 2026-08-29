@@ -670,7 +670,9 @@ class _TariffCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${moneyLabel(b.amount, tariff.currency)} / ${tariff.unitLabel}',
+                  b.isPackage
+                      ? moneyLabel(b.amount, tariff.currency)
+                      : '${moneyLabel(b.amount, tariff.currency)} / ${tariff.unitLabel}',
                   style: RType.body(),
                 ),
               ],
