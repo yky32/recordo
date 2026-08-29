@@ -908,6 +908,14 @@ class _ParkTile extends StatelessWidget {
                 Icons.local_parking_rounded,
                 color: selected ? UberColors.accent : UberColors.white,
               ),
+              if (park.hasEvCharging) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.bolt_rounded,
+                  size: 18,
+                  color: UberColors.accent,
+                ),
+              ],
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
