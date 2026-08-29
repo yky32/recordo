@@ -144,15 +144,10 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   void select(String? id) => emit(state.copyWith(selectedId: id));
 
-  /// Map pin tap — keep selection and expand collapsed rows when needed.
+  /// Map pin tap — re-rank sheet so the pin is row 0, then list can scroll to it.
   void selectFromMap(String id) {
-    final inRest = state.restParks.any((p) => p.id == id);
-    emit(
-      state.copyWith(
-        selectedId: id,
-        showRestParks: inRest ? true : state.showRestParks,
-      ),
-    );
+    emit(state.copyWith(selectedId: id));
+    _emitCatalog();
   }
 
   void setQuery(String q) {
@@ -237,14 +232,26 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     var window = sorted.take(cap).toList();
 
     final sel = state.selectedId;
-    if (sel != null && !window.any((p) => p.id == sel)) {
-      try {
-        final p = raw.firstWhere((e) => e.id == sel);
-        window = [p, ...window];
-      } catch (_) {}
+    Park? selectedPark;
+    if (sel != null) {
+      for (final p in raw) {
+        if (p.id == sel) {
+          selectedPark = p;
+          break;
+        }
+      }
+      if (selectedPark != null && !window.any((p) => p.id == sel)) {
+        window = [selectedPark, ...window];
+      }
     }
 
-    return splitFeaturedRest(window, searching: false);
+    final split = splitFeaturedRest(window, searching: false);
+    return pinSelectedToFront(
+      featured: split.featured,
+      rest: split.rest,
+      selectedId: sel,
+      fallback: selectedPark,
+    );
   }
 
   double? distanceMeters(Park p) {

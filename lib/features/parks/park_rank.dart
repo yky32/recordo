@@ -74,3 +74,38 @@ int compareParksForDisplay(
 
   return (featured: featured, rest: rest);
 }
+
+/// Map pin select: selected lot always leads the featured list, even if it
+/// sat outside the nearby window or was collapsed into [rest].
+({List<Park> featured, List<Park> rest}) pinSelectedToFront({
+  required List<Park> featured,
+  required List<Park> rest,
+  required String? selectedId,
+  Park? fallback,
+}) {
+  if (selectedId == null || selectedId.isEmpty) {
+    return (featured: featured, rest: rest);
+  }
+  Park? picked;
+  final nextFeatured = <Park>[];
+  for (final p in featured) {
+    if (p.id == selectedId) {
+      picked = p;
+    } else {
+      nextFeatured.add(p);
+    }
+  }
+  final nextRest = <Park>[];
+  for (final p in rest) {
+    if (p.id == selectedId) {
+      picked = p;
+    } else {
+      nextRest.add(p);
+    }
+  }
+  picked ??= fallback;
+  if (picked == null || picked.id != selectedId) {
+    return (featured: featured, rest: rest);
+  }
+  return (featured: [picked, ...nextFeatured], rest: nextRest);
+}
