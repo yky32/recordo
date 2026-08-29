@@ -21,12 +21,21 @@ class ParkTariff {
 
   double get _perHourFactor => 60 / unitMinutes;
 
-  /// Chip number: weekday peak converted to hourly.
+  /// Chip: first weekday peak rate, never a day package.
   double? get weekdayPeakHourly {
     final b = _band(days: 'mon-fri', kind: 'peak') ??
-        (bands.isEmpty ? null : bands.first);
+        _band(days: 'mon-sat', kind: 'peak') ??
+        _band(days: 'mon-thu', kind: 'peak') ??
+        _firstPeak;
     if (b == null) return null;
     return b.amount * _perHourFactor;
+  }
+
+  TariffBand? get _firstPeak {
+    for (final b in bands) {
+      if (b.kind == 'peak') return b;
+    }
+    return null;
   }
 
   double? get weekdayOffpeakHourly {
@@ -96,8 +105,10 @@ class ParkTariff {
 String tariffDaysLabel(String days) => switch (days) {
       'mon-thu' => '星期一至四（公眾假期除外）',
       'mon-fri' => '星期一至五',
+      'mon-sat' => '星期一至六（公眾假期除外）',
       'fri-sun-ph' => '星期五、六、日及公眾假期',
       'sat-sun-ph' => '星期六、日及公眾假期',
+      'sun-ph' => '星期日及公眾假期',
       'sun-fri' => '星期日至五',
       'daily' => '每日',
       _ => days,
@@ -112,9 +123,9 @@ class TariffBand {
     required this.amount,
   });
 
-  /// mon-thu | mon-fri | fri-sun-ph | sat-sun-ph | sun-fri | daily
+  /// mon-thu | mon-fri | mon-sat | fri-sun-ph | sat-sun-ph | sun-ph | sun-fri | daily
   final String days;
-  /// peak | offpeak
+  /// peak | offpeak | day (flat package, not per unit)
   final String kind;
   final String start;
   final String end;
@@ -122,7 +133,13 @@ class TariffBand {
 
   String get daysLabel => tariffDaysLabel(days);
 
-  String get kindLabel => kind == 'offpeak' ? '非繁忙' : '繁忙時間';
+  String get kindLabel => switch (kind) {
+        'offpeak' => '非繁忙',
+        'day' => '日泊',
+        _ => '繁忙時間',
+      };
+
+  bool get isPackage => kind == 'day';
 
   String get windowLabel {
     if (end.compareTo(start) < 0 || start == '23:00' && end == '07:00') {

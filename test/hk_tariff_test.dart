@@ -87,4 +87,39 @@ void main() {
     expect(tw.validations.first.line(currency: tw.currency), contains('NT\$500'));
     expect(tw.toJson()['validations'][0].containsKey('spendHkd'), isFalse);
   });
+
+  test('Harcourt House: mon-sat / sun-ph + day package', () {
+    final t = ParkTariff.tryParse({
+      'unitMinutes': 60,
+      'currency': 'HKD',
+      'bands': [
+        {
+          'days': 'mon-sat',
+          'kind': 'peak',
+          'start': '00:00',
+          'end': '24:00',
+          'amount': 35,
+        },
+        {
+          'days': 'sun-ph',
+          'kind': 'peak',
+          'start': '00:00',
+          'end': '24:00',
+          'amount': 20,
+        },
+        {
+          'days': 'mon-sat',
+          'kind': 'day',
+          'start': '08:00',
+          'end': '18:00',
+          'amount': 200,
+        },
+      ],
+    });
+    expect(t!.weekdayPeakHourly, 35);
+    expect(t.bands.last.isPackage, isTrue);
+    expect(t.bands.last.kindLabel, '日泊');
+    expect(tariffDaysLabel('mon-sat'), contains('星期一至六'));
+    expect(tariffDaysLabel('sun-ph'), contains('星期日'));
+  });
 }
