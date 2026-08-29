@@ -6,6 +6,7 @@ class ParkTariff {
     required this.bands,
     this.validations = const [],
     this.sourceName,
+    this.currency = 'HKD',
   });
 
   /// 30 = 半小時 (Times Square / most malls). 60 = 每小時.
@@ -13,6 +14,8 @@ class ParkTariff {
   final List<TariffBand> bands;
   final List<TariffValidation> validations;
   final String? sourceName;
+  /// ISO 4217. Never bake currency into JSON keys (`spend` not `spendHkd`).
+  final String currency;
 
   String get unitLabel => unitMinutes == 30 ? '半小時' : '小時';
 
@@ -76,11 +79,13 @@ class ParkTariff {
       sourceName: '${m['sourceName'] ?? m['source_name'] ?? ''}'.trim().isEmpty
           ? null
           : '${m['sourceName'] ?? m['source_name']}'.trim(),
+      currency: _currencyCode(m['currency']),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'unitMinutes': unitMinutes,
+        'currency': currency,
         'bands': bands.map((e) => e.toJson()).toList(),
         if (validations.isNotEmpty)
           'validations': validations.map((e) => e.toJson()).toList(),
@@ -153,37 +158,37 @@ class TariffBand {
 class TariffValidation {
   const TariffValidation({
     required this.days,
-    required this.spendHkd,
+    required this.spend,
     required this.freeHours,
     this.entryAfter,
   });
 
   final String days;
-  final double spendHkd;
+  final double spend;
   final double freeHours;
   final String? entryAfter;
 
   String get daysLabel => tariffDaysLabel(days);
 
-  String get line {
-    final spend = spendHkd.toStringAsFixed(0);
+  String line({String currency = 'HKD'}) {
     final hrs = freeHours == freeHours.roundToDouble()
         ? freeHours.toStringAsFixed(0)
         : freeHours.toString();
+    final money = moneyLabel(spend, currency);
     if (entryAfter != null && entryAfter!.isNotEmpty) {
-      return '$daysLabel · $entryAfter 後入車，滿 HK\$$spend：免 $hrs 小時';
+      return '$daysLabel · $entryAfter 後入車，滿 $money：免 $hrs 小時';
     }
-    return '$daysLabel · 滿 HK\$$spend：免 $hrs 小時';
+    return '$daysLabel · 滿 $money：免 $hrs 小時';
   }
 
   static TariffValidation? tryParse(Map<String, dynamic> m) {
-    final spend = _num(m['spendHkd'] ?? m['spend']);
+    final spend = _num(m['spend'] ?? m['spendHkd']);
     final hours = _num(m['freeHours'] ?? m['free_hours']);
     if (spend == null || hours == null) return null;
     final after = '${m['entryAfter'] ?? m['entry_after'] ?? ''}'.trim();
     return TariffValidation(
       days: '${m['days'] ?? 'daily'}',
-      spendHkd: spend,
+      spend: spend,
       freeHours: hours,
       entryAfter: after.isEmpty ? null : after,
     );
@@ -191,7 +196,7 @@ class TariffValidation {
 
   Map<String, dynamic> toJson() => {
         'days': days,
-        'spendHkd': spendHkd,
+        'spend': spend,
         'freeHours': freeHours,
         if (entryAfter != null) 'entryAfter': entryAfter,
       };
@@ -209,9 +214,30 @@ double? _num(dynamic v) {
   return double.tryParse('$v');
 }
 
+String _currencyCode(dynamic raw) {
+  final s = '${raw ?? ''}'.trim().toUpperCase();
+  if (s == 'TWD' || s == 'NTD' || s == 'NT\$' || s == 'NTD') return 'TWD';
+  if (s == 'HKD' || s.isEmpty) return 'HKD';
+  if (s.length == 3) return s;
+  return 'HKD';
+}
+
+/// Amount only. Currency is a sibling field, never in the key.
+String moneyLabel(num amount, [String currency = 'HKD']) {
+  final n = amount == amount.roundToDouble()
+      ? amount.toStringAsFixed(0)
+      : amount.toString();
+  return switch (currency.toUpperCase()) {
+    'TWD' => 'NT\$$n',
+    'HKD' => 'HK\$$n',
+    _ => '$currency $n',
+  };
+}
+
 /// Reference record: 銅鑼灣時代廣場停車場 official tariff (2026-08).
 Map<String, dynamic> timesSquareTariffJson() => {
       'unitMinutes': 30,
+      'currency': 'HKD',
       'sourceName': '時代廣場停車場',
       'bands': [
         {
@@ -244,13 +270,13 @@ Map<String, dynamic> timesSquareTariffJson() => {
         },
       ],
       'validations': [
-        {'days': 'mon-fri', 'spendHkd': 300, 'freeHours': 3},
+        {'days': 'mon-fri', 'spend': 300, 'freeHours': 3},
         {
           'days': 'sun-fri',
-          'spendHkd': 200,
+          'spend': 200,
           'freeHours': 3,
           'entryAfter': '16:00',
         },
-        {'days': 'sat-sun-ph', 'spendHkd': 300, 'freeHours': 2},
+        {'days': 'sat-sun-ph', 'spend': 300, 'freeHours': 2},
       ],
     };

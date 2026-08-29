@@ -670,7 +670,7 @@ class _TariffCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'HK\$${b.amount.toStringAsFixed(0)} / ${tariff.unitLabel}',
+                  '${moneyLabel(b.amount, tariff.currency)} / ${tariff.unitLabel}',
                   style: RType.body(),
                 ),
               ],
@@ -686,7 +686,7 @@ class _TariffCard extends StatelessWidget {
           Text('商場優惠', style: RType.label()),
           const SizedBox(height: 6),
           for (final v in tariff.validations) ...[
-            Text(v.line, style: RType.muted()),
+            Text(v.line(currency: tariff.currency), style: RType.muted()),
             const SizedBox(height: 4),
           ],
         ],
@@ -703,11 +703,11 @@ class _PriceBreakdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <(String, String)>[
       if (park.hourlyHkd != null)
-        ('時租', 'HK\$${park.hourlyHkd!.toStringAsFixed(0)}'),
+        ('時租', moneyLabel(park.hourlyHkd!, park.currency)),
       if (park.dailyHkd != null)
-        ('日泊', 'HK\$${park.dailyHkd!.toStringAsFixed(0)}'),
+        ('日泊', moneyLabel(park.dailyHkd!, park.currency)),
       if (park.nightHkd != null)
-        ('夜泊', 'HK\$${park.nightHkd!.toStringAsFixed(0)}'),
+        ('夜泊', moneyLabel(park.nightHkd!, park.currency)),
     ];
     if (rows.isEmpty) {
       return Text(park.priceSummary, style: RType.body());
