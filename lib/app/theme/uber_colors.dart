@@ -65,14 +65,14 @@ abstract final class UberColors {
   static Color get ctaOnFill =>
       _dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 
-  /// CARTO basemap — plain PNG (no {r} retina token; more reliable on iOS).
-  /// Light uses Voyager: `light_all` is near-white and reads as an empty card.
+  /// Raster basemap — no vendor API key (CARTO now watermarks "API KEY REQUIRED").
+  /// Dark: Esri World Dark Gray. Light: OSM (CARTO Voyager also needs a key).
   static String get mapTileUrl => _dark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   static const mapTileFallback =
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   static OutlineInputBorder fieldOutline({bool focused = false}) {
     return OutlineInputBorder(
