@@ -2,11 +2,13 @@ import 'package:geolocator/geolocator.dart';
 
 /// Result of a one-shot user location lookup.
 class UserLocationResult {
-  const UserLocationResult({this.lat, this.lng, this.error});
+  const UserLocationResult({this.lat, this.lng, this.error, this.demo = false});
 
   final double? lat;
   final double? lng;
   final String? error;
+  /// Sim / 境外 — not a real HK GPS fix. Must not steal the camera.
+  final bool demo;
 
   bool get ok => lat != null && lng != null;
 }
@@ -46,10 +48,14 @@ abstract final class UserLocationResolver {
           ),
         );
       } catch (_) {
-        pos = await Geolocator.getLastKnownPosition();
+        // Do not use lastKnown — stale 灣仔 cache flies the camera.
+        pos = null;
       }
       if (pos == null) {
         return const UserLocationResult(error: '定位失敗 · 再試');
+      }
+      if (pos.latitude.abs() < 0.01 && pos.longitude.abs() < 0.01) {
+        return const UserLocationResult(error: '定位無效');
       }
 
       final kmFromHk = Geolocator.distanceBetween(
@@ -60,7 +66,12 @@ abstract final class UserLocationResolver {
           ) /
           1000;
       if (kmFromHk > _maxKmFromHk) {
-        return const UserLocationResult(lat: _hkLat, lng: _hkLng);
+        // Simulator abroad: keep HK map, but do not pretend GPS is 灣仔.
+        return const UserLocationResult(
+          lat: _hkLat,
+          lng: _hkLng,
+          demo: true,
+        );
       }
       return UserLocationResult(lat: pos.latitude, lng: pos.longitude);
     } catch (_) {

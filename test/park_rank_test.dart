@@ -66,6 +66,34 @@ void main() {
     expect(cmp, lessThan(0));
   });
 
+  test('sortParksForDisplay is distance-first with one geodesic per park', () {
+    const kamLat = 22.435;
+    const kamLng = 114.064;
+    final kam = Park(
+      id: 'kam',
+      name: '錦上路',
+      district: '元朗',
+      lat: kamLat,
+      lng: kamLng,
+      hourlyHkd: 16,
+    );
+    final k11 = Park(
+      id: 'k11',
+      name: 'K11 Art Mall',
+      district: '尖沙咀',
+      lat: 22.297,
+      lng: 114.174,
+      hourlyHkd: 39,
+    );
+    final sorted = sortParksForDisplay(
+      [k11, kam],
+      centerLat: kamLat,
+      centerLng: kamLng,
+    );
+    expect(sorted.first.id, 'kam');
+    expect(sorted.last.id, 'k11');
+  });
+
   test('splitFeaturedRest keeps nearby priced, not only wedge', () {
     final near = _p('yoho', hourly: 20);
     final farWedge = Park(

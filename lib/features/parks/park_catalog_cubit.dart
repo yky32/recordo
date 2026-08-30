@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:recordo/core/location/user_location.dart';
@@ -126,6 +128,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   final ParkRepository _repo;
   final TdParkingClient _td;
+  Timer? _pinRank;
 
   void _emitCatalog({bool loading = false}) {
     final all = _repo.allWithUgc();
@@ -156,8 +159,8 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     if (result == CatalogSyncResult.updated) {
       _emitCatalog();
     }
-    await refreshTdVacancy();
-    await refreshMeters();
+    unawaited(refreshTdVacancy());
+    unawaited(refreshMeters());
   }
 
   Future<void> refreshMeters() async {
@@ -219,15 +222,20 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   /// Called when user drags map — pin stays center, target moves.
   void setPin(double lat, double lng) {
-    final piped = _pipeline(_repo.allWithUgc(), pinLat: lat, pinLng: lng);
-    emit(
-      state.copyWith(
-        pinLat: lat,
-        pinLng: lng,
-        parks: piped.featured,
-        restParks: piped.rest,
-      ),
-    );
+    emit(state.copyWith(pinLat: lat, pinLng: lng));
+    _pinRank?.cancel();
+    _pinRank = Timer(const Duration(milliseconds: 480), () {
+      if (isClosed) return;
+      final piped = _pipeline(_repo.allWithUgc(), pinLat: lat, pinLng: lng);
+      emit(
+        state.copyWith(
+          pinLat: lat,
+          pinLng: lng,
+          parks: piped.featured,
+          restParks: piped.rest,
+        ),
+      );
+    });
   }
 
   ({List<Park> featured, List<Park> rest}) _pipeline(
@@ -251,15 +259,11 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     final cLat = pinLat ?? state.pinLat ?? state.userLat;
     final cLng = pinLng ?? state.pinLng ?? state.userLng;
 
-    final sorted = List<Park>.from(list)
-      ..sort(
-        (a, b) => compareParksForDisplay(
-          a,
-          b,
-          centerLat: cLat,
-          centerLng: cLng,
-        ),
-      );
+    final sorted = sortParksForDisplay(
+      list,
+      centerLat: cLat,
+      centerLng: cLng,
+    );
 
     if (q.isNotEmpty) {
       return (featured: sorted, rest: const []);
@@ -432,4 +436,10 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
 
   /// Resolve park by id even if not in nearby window (detail route).
   Park? parkById(String id) => _repo.byId(id);
+
+  @override
+  Future<void> close() {
+    _pinRank?.cancel();
+    return super.close();
+  }
 }
