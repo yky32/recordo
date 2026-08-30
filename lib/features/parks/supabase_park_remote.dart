@@ -49,8 +49,9 @@ class SupabaseParkRemote {
     if (c == null) return const [];
     try {
       final raw = await c.rpc('meters_dump');
-      if (raw is! Map) return const [];
-      final list = raw['meters'] as List? ?? const [];
+      final map = raw is Map ? Map<String, dynamic>.from(raw) : null;
+      if (map == null) return const [];
+      final list = map['meters'] as List? ?? const [];
       final out = <MeterStreet>[];
       for (final e in list) {
         if (e is! Map) continue;

@@ -349,10 +349,18 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
   }
 
   List<Marker> _meterMarkers() {
-    final origin = _me ??
-        (widget.parks.isNotEmpty
-            ? LatLng(widget.parks.first.lat, widget.parks.first.lng)
-            : hkCenter);
+    LatLng origin;
+    var z = 16.0;
+    try {
+      origin = _map.camera.center;
+      z = _map.camera.zoom;
+    } catch (_) {
+      origin = _me ??
+          (widget.parks.isNotEmpty
+              ? LatLng(widget.parks.first.lat, widget.parks.first.lng)
+              : hkCenter);
+    }
+    if (z < 14.5) return const [];
     final scored = <({MeterStreet m, double d})>[];
     for (final m in widget.meters) {
       final d = Geolocator.distanceBetween(
@@ -368,8 +376,8 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       for (final e in scored.take(60))
         Marker(
           point: LatLng(e.m.lat, e.m.lng),
-          width: 92,
-          height: 36,
+          width: 96,
+          height: 38,
           alignment: Alignment.bottomCenter,
           child: MeterChip(
             label: e.m.chipLabel,
