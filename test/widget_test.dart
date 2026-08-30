@@ -39,6 +39,28 @@ void main() {
     expect(s.isActive, isFalse);
   });
 
+  test('clampSessionStart rejects future and >24h ago', () {
+    final now = DateTime(2026, 8, 30, 16, 34);
+    expect(
+      clampSessionStart(now.add(const Duration(minutes: 10)), now: now),
+      now,
+    );
+    expect(
+      clampSessionStart(now.subtract(const Duration(hours: 30)), now: now),
+      now.subtract(const Duration(hours: 24)),
+    );
+    expect(
+      clampSessionStart(now.subtract(const Duration(minutes: 20)), now: now),
+      now.subtract(const Duration(minutes: 20)),
+    );
+  });
+
+  test('sessionStartFromClock later than now is yesterday', () {
+    final now = DateTime(2026, 8, 30, 0, 30);
+    final dt = sessionStartFromClock(23, 0, now: now);
+    expect(dt, DateTime(2026, 8, 29, 23, 0));
+  });
+
   test('parking alarm copy mentions parked time and fee', () {
     expect(formatAlarmDuration(const Duration(hours: 2)), '2 小時');
     expect(

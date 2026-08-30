@@ -42,7 +42,7 @@ class LiveActivityService {
   Map<String, dynamic> _payload(ParkingSession s, {String? hourlyLabel}) {
     return {
       'parkName': s.parkName ?? '停車場',
-      'startMs': s.startedAt.millisecondsSinceEpoch.toDouble(),
+      'startMs': s.startedAt.millisecondsSinceEpoch,
       'hourlyLabel': hourlyLabel ?? '',
       'sessionId': s.id,
     };
