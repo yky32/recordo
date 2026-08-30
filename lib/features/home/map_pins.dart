@@ -303,14 +303,21 @@ class MeterChip extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0x33FFFFFF)),
             ),
-            child: Text(
-              '咪 $label',
-              style: TextStyle(
-                color: fg,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.timer_outlined, size: 13, color: fg),
+                const SizedBox(width: 3),
+                Text(
+                  '咪 $label',
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+              ],
             ),
           ),
           CustomPaint(

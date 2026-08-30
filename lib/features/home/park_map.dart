@@ -380,7 +380,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       for (final e in scored.take(60))
         Marker(
           point: LatLng(e.m.lat, e.m.lng),
-          width: 96,
+          width: 112,
           height: 38,
           alignment: Alignment.bottomCenter,
           child: MeterChip(
