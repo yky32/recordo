@@ -8,12 +8,10 @@ import 'package:recordo/app/routes.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
-import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
-import 'package:recordo/features/parks/meter_space.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -243,98 +241,6 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     super.dispose();
   }
 
-  void _showMeterSheet(MeterSpace m, MeterBayStatus? status) {
-    final occ = switch (status) {
-      MeterBayStatus.vacant => '空置',
-      MeterBayStatus.occupied => '已使用',
-      MeterBayStatus.suspended => '暫停使用',
-      null => '空位無數據',
-    };
-    final occColor = switch (status) {
-      MeterBayStatus.vacant => const Color(0xFF2FA86B),
-      MeterBayStatus.occupied => const Color(0xFFE24B4A),
-      MeterBayStatus.suspended => const Color(0xFF8A8A8A),
-      null => UberColors.muted,
-    };
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: UberColors.sheet,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('泊車位: ${m.id}', style: RType.titleSm()),
-              const SizedBox(height: 6),
-              Text(
-                '${m.placeLine}${m.subDistrict.isNotEmpty ? ' (${m.subDistrict})' : ''}',
-                style: RType.muted(),
-              ),
-              const SizedBox(height: 10),
-              Text(occ, style: RType.label().copyWith(color: occColor)),
-              const SizedBox(height: 12),
-              Text(m.vehicleLabel, style: RType.body()),
-              const SizedBox(height: 8),
-              Text(m.lppLabel, style: RType.body()),
-              const SizedBox(height: 8),
-              Text('收費 ${m.feeLabel}', style: RType.body()),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: UberColors.ctaFill,
-                    foregroundColor: UberColors.ctaOnFill,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ParkNavigation.openHkeMeter();
-                  },
-                  icon: const Icon(Icons.payments_outlined, size: 18),
-                  label: const Text('去入錶易繳費'),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: UberColors.white,
-                    side: BorderSide(color: UberColors.hairline),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ParkNavigation.openDriving(
-                      context,
-                      lat: m.lat,
-                      lng: m.lng,
-                      name: '咪錶 ${m.id}',
-                    );
-                  },
-                  icon: const Icon(Icons.directions_rounded, size: 18),
-                  label: const Text('規劃路線'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _endSession(BuildContext context) async {
     await showEndSessionSheet(context);
   }
@@ -390,17 +296,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     },
                     onSelectMeter: (id) {
                       hideKeyboard();
-                      setState(() => _meterId = id);
-                      MeterSpace? m;
-                      for (final e in catalog.meterSpaces) {
-                        if (e.id == id) {
-                          m = e;
-                          break;
-                        }
-                      }
-                      if (m != null) {
-                        _showMeterSheet(m, catalog.meterOccupancy[id]?.status);
-                      }
+                      setState(() => _meterId = id.isEmpty ? null : id);
                     },
                     onMeterViewport: ({
                       required minLat,

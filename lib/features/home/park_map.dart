@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/location/user_location.dart';
+import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_clusters.dart';
@@ -384,21 +386,73 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       z = _map.camera.zoom;
     } catch (_) {}
     if (z < 16) return const [];
-    return [
-      for (final m in widget.meterSpaces)
-        Marker(
-          point: LatLng(m.lat, m.lng),
-          width: 18,
-          height: 18,
-          alignment: Alignment.center,
-          child: MeterBayDot(
-            status: widget.meterOccupancy[m.id]?.status ??
-                MeterBayStatus.suspended,
-            selected: m.id == widget.selectedMeterId,
-            onTap: () => widget.onSelectMeter?.call(m.id),
+    final groups = <String, List<MeterSpace>>{};
+    for (final m in widget.meterSpaces) {
+      final k =
+          '${m.lat.toStringAsFixed(5)},${m.lng.toStringAsFixed(5)}';
+      (groups[k] ??= []).add(m);
+    }
+    final out = <Marker>[];
+    for (final g in groups.values) {
+      for (var i = 0; i < g.length; i++) {
+        final m = g[i];
+        var lat = m.lat;
+        var lng = m.lng;
+        if (g.length > 1) {
+          final a = (2 * math.pi * i) / g.length;
+          lat += 0.00004 * math.sin(a);
+          lng += 0.00004 * math.cos(a);
+        }
+        out.add(
+          Marker(
+            point: LatLng(lat, lng),
+            width: 18,
+            height: 18,
+            alignment: Alignment.center,
+            child: MeterBayDot(
+              status: widget.meterOccupancy[m.id]?.status ??
+                  MeterBayStatus.suspended,
+              selected: m.id == widget.selectedMeterId,
+              onTap: () => widget.onSelectMeter?.call(
+                m.id == widget.selectedMeterId ? '' : m.id,
+              ),
+            ),
           ),
+        );
+      }
+    }
+    return out;
+  }
+
+  Marker? _meterCallout() {
+    final id = widget.selectedMeterId;
+    if (id == null) return null;
+    MeterSpace? m;
+    for (final e in widget.meterSpaces) {
+      if (e.id == id) {
+        m = e;
+        break;
+      }
+    }
+    if (m == null) return null;
+    return Marker(
+      point: LatLng(m.lat, m.lng),
+      width: 240,
+      height: 168,
+      alignment: Alignment.centerLeft,
+      child: MeterCallout(
+        space: m,
+        status: widget.meterOccupancy[m.id]?.status,
+        onClose: () => widget.onSelectMeter?.call(''),
+        onPay: ParkNavigation.openHkeMeter,
+        onRoute: () => ParkNavigation.openDriving(
+          context,
+          lat: m!.lat,
+          lng: m.lng,
+          name: '咪錶 ${m.id}',
         ),
-    ];
+      ),
+    );
   }
 
   @override
@@ -498,6 +552,8 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
             MarkerLayer(markers: clusterMarkers),
             if (selectedMarker != null) MarkerLayer(markers: [selectedMarker]),
             MarkerLayer(markers: _meterMarkers()),
+            if (_meterCallout() != null)
+              MarkerLayer(markers: [_meterCallout()!]),
             if (_me != null)
               MarkerLayer(
                 markers: [
