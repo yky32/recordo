@@ -14,6 +14,7 @@ import 'package:recordo/features/parks/supabase_park_remote.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/parks/sync_rules.dart';
 import 'package:recordo/features/parks/meter_street.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 
 export 'package:recordo/features/parks/catalog_cache.dart' show CatalogSyncResult;
 
@@ -41,6 +42,19 @@ class ParkRepository {
   bool get playingFromCloudSnapshot => _fromCloud;
 
   Future<List<MeterStreet>> fetchMetersDump() => _remote.fetchMetersDump();
+
+  Future<List<MeterSpace>> fetchMeterSpacesInBbox({
+    required double minLat,
+    required double minLng,
+    required double maxLat,
+    required double maxLng,
+  }) =>
+      _remote.fetchMeterSpacesInBbox(
+        minLat: minLat,
+        minLng: minLng,
+        maxLat: maxLat,
+        maxLng: maxLng,
+      );
   int get osmCount => _catalog?.length ?? 0;
   int get baseCount => _catalog?.length ?? 0;
 
