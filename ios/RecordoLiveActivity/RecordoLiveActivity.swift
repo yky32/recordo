@@ -139,16 +139,31 @@ struct RecordoParkingLiveActivity: Widget {
   private func timerRange(
     _ context: ActivityViewContext<LiveActivitiesAppAttributes>
   ) -> ClosedRange<Date> {
-    let startMs = sharedDefault.double(forKey: context.attributes.prefixedKey("startMs"))
-    let start: Date
-    if startMs > 0 {
-      start = Date(timeIntervalSince1970: startMs / 1000.0)
-    } else {
-      start = Date()
-    }
+    let start = startDate(context)
     // Live Activity timerInterval needs an end bound; count-up until +12h
     let end = start.addingTimeInterval(12 * 60 * 60)
     return start...end
+  }
+
+  /// App Group startMs (epoch ms). 0 → Date() is why Island lagged ~20s.
+  private func startDate(
+    _ context: ActivityViewContext<LiveActivitiesAppAttributes>
+  ) -> Date {
+    let key = context.attributes.prefixedKey("startMs")
+    var raw = sharedDefault.double(forKey: key)
+    if raw == 0 {
+      raw = Double(sharedDefault.integer(forKey: key))
+    }
+    if raw == 0, let n = sharedDefault.object(forKey: key) as? NSNumber {
+      raw = n.doubleValue
+    }
+    if raw > 1_000_000_000_000 {
+      return Date(timeIntervalSince1970: raw / 1000.0)
+    }
+    if raw > 1_000_000_000 {
+      return Date(timeIntervalSince1970: raw)
+    }
+    return Date()
   }
 
   private func feeLine(
