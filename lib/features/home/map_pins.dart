@@ -289,8 +289,8 @@ class MeterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = selected ? const Color(0xFF3D7A5A) : const Color(0xFF1E1E1E);
-    final fg = Colors.white;
+    final fill = selected ? const Color(0xFF3D7A5A) : Colors.white;
+    final fg = selected ? Colors.white : const Color(0xFF111111);
     return GestureDetector(
       onTap: onTap,
       child: Column(
