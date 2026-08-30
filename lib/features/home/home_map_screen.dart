@@ -547,6 +547,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                         selected: on,
                                         distance: ParkCatalogCubit
                                             .formatDistance(dm),
+                                        vacancy: catalog
+                                            .tdVacancyFor(park.id)
+                                            ?.label,
                                         onTap: () => _selectAndAnchor(
                                           park.id,
                                           catalog.allWindowParks,
@@ -895,6 +898,7 @@ class _ParkTile extends StatelessWidget {
     required this.onTap,
     required this.onOpenDetail,
     this.distance = '',
+    this.vacancy,
   });
 
   final Park park;
@@ -902,6 +906,7 @@ class _ParkTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onOpenDetail;
   final String distance;
+  final String? vacancy;
 
   @override
   Widget build(BuildContext context) {
@@ -945,6 +950,7 @@ class _ParkTile extends StatelessWidget {
                         if (distance.isNotEmpty) distance,
                         park.district,
                         park.priceSummary,
+                        ?vacancy,
                         if (selected) park.freshnessLabel,
                       ].where((s) => s.isNotEmpty).join(' · '),
                       style: RType.muted(),
