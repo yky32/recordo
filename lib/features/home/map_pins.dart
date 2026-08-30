@@ -3,6 +3,7 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 
 const googleBlue = Color(0xFF4285F4);
 
@@ -318,6 +319,43 @@ class MeterChip extends StatelessWidget {
             painter: _ChipPointerPainter(fill),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class MeterBayDot extends StatelessWidget {
+  const MeterBayDot({
+    super.key,
+    required this.status,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final MeterBayStatus status;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      MeterBayStatus.vacant => const Color(0xFF2FA86B),
+      MeterBayStatus.occupied => const Color(0xFFE24B4A),
+      MeterBayStatus.suspended => const Color(0xFF8A8A8A),
+    };
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: selected ? 16 : 12,
+        height: selected ? 16 : 12,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white,
+            width: selected ? 2 : 1.2,
+          ),
+        ),
       ),
     );
   }

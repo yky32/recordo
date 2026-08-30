@@ -12,7 +12,7 @@ import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
-import 'package:recordo/features/parks/meter_street.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -242,7 +242,19 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     super.dispose();
   }
 
-  void _showMeterSheet(MeterStreet m) {
+  void _showMeterSheet(MeterSpace m, MeterBayStatus? status) {
+    final occ = switch (status) {
+      MeterBayStatus.vacant => '空置',
+      MeterBayStatus.occupied => '已使用',
+      MeterBayStatus.suspended => '暫停使用',
+      null => '空位無數據',
+    };
+    final occColor = switch (status) {
+      MeterBayStatus.vacant => const Color(0xFF2FA86B),
+      MeterBayStatus.occupied => const Color(0xFFE24B4A),
+      MeterBayStatus.suspended => const Color(0xFF8A8A8A),
+      null => UberColors.muted,
+    };
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: UberColors.sheet,
@@ -256,15 +268,20 @@ class _HomeMapScreenState extends State<HomeMapScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(m.name, style: RType.titleSm()),
+              Text('泊車位: ${m.id}', style: RType.titleSm()),
               const SizedBox(height: 6),
               Text(
-                '${m.district} · ${m.chipLabel}'
-                '${m.spacesCar > 0 ? ' · ${m.spacesCar} 位' : ''}',
+                '${m.placeLine}${m.subDistrict.isNotEmpty ? ' (${m.subDistrict})' : ''}',
                 style: RType.muted(),
               ),
+              const SizedBox(height: 10),
+              Text(occ, style: RType.label().copyWith(color: occColor)),
+              const SizedBox(height: 12),
+              Text(m.vehicleLabel, style: RType.body()),
               const SizedBox(height: 8),
-              Text('運輸署咪錶', style: RType.muted()),
+              Text(m.lppLabel, style: RType.body()),
+              const SizedBox(height: 8),
+              Text('收費 ${m.feeLabel}', style: RType.body()),
             ],
           ),
         );
@@ -314,7 +331,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                   ParkMap(
                     key: _mapKey,
                     parks: catalog.allWindowParks,
-                    meters: catalog.meters,
+                    meterSpaces: catalog.meterSpaces,
+                    meterOccupancy: catalog.meterOccupancy,
                     selectedId: catalog.selectedId,
                     selectedMeterId: _meterId,
                     bandTopY: _bandTopY,
@@ -327,14 +345,31 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     onSelectMeter: (id) {
                       hideKeyboard();
                       setState(() => _meterId = id);
-                      MeterStreet? m;
-                      for (final e in catalog.meters) {
+                      MeterSpace? m;
+                      for (final e in catalog.meterSpaces) {
                         if (e.id == id) {
                           m = e;
                           break;
                         }
                       }
-                      if (m != null) _showMeterSheet(m);
+                      if (m != null) {
+                        _showMeterSheet(m, catalog.meterOccupancy[id]?.status);
+                      }
+                    },
+                    onMeterViewport: ({
+                      required minLat,
+                      required minLng,
+                      required maxLat,
+                      required maxLng,
+                      required zoom,
+                    }) {
+                      context.read<ParkCatalogCubit>().onMeterViewport(
+                            minLat: minLat,
+                            minLng: minLng,
+                            maxLat: maxLat,
+                            maxLng: maxLng,
+                            zoom: zoom,
+                          );
                     },
                     onMapInteraction: hideKeyboard,
                     onUserLocation: (ll) => context

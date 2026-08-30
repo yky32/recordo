@@ -11,6 +11,7 @@ import 'package:recordo/features/parks/park_repository.dart';
 import 'package:recordo/features/parks/td_parking_client.dart';
 import 'package:recordo/features/parks/td_vacancy.dart';
 import 'package:recordo/features/parks/meter_street.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 
 class ParkCatalogState {
   const ParkCatalogState({
@@ -31,6 +32,8 @@ class ParkCatalogState {
     this.communityPaidLoading = const {},
     this.tdVacancyByParkId = const {},
     this.meters = const [],
+    this.meterSpaces = const [],
+    this.meterOccupancy = const {},
   });
 
   final List<Park> parks;
@@ -54,6 +57,8 @@ class ParkCatalogState {
   /// TD participating lots only. Never written into catalog_dump.
   final Map<String, TdHourlyVacancy> tdVacancyByParkId;
   final List<MeterStreet> meters;
+  final List<MeterSpace> meterSpaces;
+  final Map<String, MeterOccupancy> meterOccupancy;
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -96,6 +101,8 @@ class ParkCatalogState {
     Set<String>? communityPaidLoading,
     Map<String, TdHourlyVacancy>? tdVacancyByParkId,
     List<MeterStreet>? meters,
+    List<MeterSpace>? meterSpaces,
+    Map<String, MeterOccupancy>? meterOccupancy,
     bool clearSelected = false,
   }) {
     return ParkCatalogState(
@@ -116,6 +123,8 @@ class ParkCatalogState {
       communityPaidLoading: communityPaidLoading ?? this.communityPaidLoading,
       tdVacancyByParkId: tdVacancyByParkId ?? this.tdVacancyByParkId,
       meters: meters ?? this.meters,
+      meterSpaces: meterSpaces ?? this.meterSpaces,
+      meterOccupancy: meterOccupancy ?? this.meterOccupancy,
     );
   }
 }
@@ -129,6 +138,8 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   final ParkRepository _repo;
   final TdParkingClient _td;
   Timer? _pinRank;
+  Timer? _meterBbox;
+  int _meterSeq = 0;
 
   void _emitCatalog({bool loading = false}) {
     final all = _repo.allWithUgc();
@@ -160,7 +171,6 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       _emitCatalog();
     }
     unawaited(refreshTdVacancy());
-    unawaited(refreshMeters());
   }
 
   Future<void> refreshMeters() async {
@@ -168,6 +178,52 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       final meters = await _repo.fetchMetersDump();
       if (isClosed) return;
       emit(state.copyWith(meters: meters));
+    } catch (_) {}
+  }
+
+  void onMeterViewport({
+    required double minLat,
+    required double minLng,
+    required double maxLat,
+    required double maxLng,
+    required double zoom,
+  }) {
+    _meterBbox?.cancel();
+    if (zoom < 16) {
+      if (state.meterSpaces.isNotEmpty) {
+        emit(state.copyWith(meterSpaces: const []));
+      }
+      return;
+    }
+    _meterBbox = Timer(const Duration(milliseconds: 380), () {
+      unawaited(
+        _loadMeterViewport(
+          minLat: minLat,
+          minLng: minLng,
+          maxLat: maxLat,
+          maxLng: maxLng,
+        ),
+      );
+    });
+  }
+
+  Future<void> _loadMeterViewport({
+    required double minLat,
+    required double minLng,
+    required double maxLat,
+    required double maxLng,
+  }) async {
+    final seq = ++_meterSeq;
+    try {
+      final spaces = await _repo.fetchMeterSpacesInBbox(
+        minLat: minLat,
+        minLng: minLng,
+        maxLat: maxLat,
+        maxLng: maxLng,
+      );
+      final occ = await _td.fetchMeterOccupancy();
+      if (isClosed || seq != _meterSeq) return;
+      emit(state.copyWith(meterSpaces: spaces, meterOccupancy: occ));
     } catch (_) {}
   }
 
@@ -440,6 +496,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   @override
   Future<void> close() {
     _pinRank?.cancel();
+    _meterBbox?.cancel();
     return super.close();
   }
 }

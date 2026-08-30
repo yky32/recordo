@@ -11,7 +11,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/park.dart';
-import 'package:recordo/features/parks/meter_street.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 
 /// Full-screen map. Parent overlays search/sheet.
 /// Band notifiers are read only when centering — sheet drag must not rebuild tiles.
@@ -27,9 +27,11 @@ class ParkMap extends StatefulWidget {
     this.onPinMoved,
     this.onLocateState,
     this.onMapInteraction,
-    this.meters = const [],
+    this.meterSpaces = const [],
+    this.meterOccupancy = const {},
     this.selectedMeterId,
     this.onSelectMeter,
+    this.onMeterViewport,
   });
 
   final List<Park> parks;
@@ -41,9 +43,17 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
   final VoidCallback? onMapInteraction;
-  final List<MeterStreet> meters;
+  final List<MeterSpace> meterSpaces;
+  final Map<String, MeterOccupancy> meterOccupancy;
   final String? selectedMeterId;
   final ValueChanged<String>? onSelectMeter;
+  final void Function({
+    required double minLat,
+    required double minLng,
+    required double maxLat,
+    required double maxLng,
+    required double zoom,
+  })? onMeterViewport;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -243,6 +253,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
         },
         onError: (_) {},
       );
+      _emitMeterViewport();
     } catch (_) {
       widget.onLocateState?.call(false, '定位失敗 · 再試');
     } finally {
@@ -281,6 +292,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       _pinDebounce = Timer(const Duration(milliseconds: 380), () {
         if (!mounted) return;
         widget.onPinMoved?.call(center);
+        _emitMeterViewport();
       });
     }
   }
@@ -352,41 +364,38 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     }
   }
 
+  void _emitMeterViewport() {
+    try {
+      final cam = _map.camera;
+      final b = cam.visibleBounds;
+      widget.onMeterViewport?.call(
+        minLat: b.south,
+        minLng: b.west,
+        maxLat: b.north,
+        maxLng: b.east,
+        zoom: cam.zoom,
+      );
+    } catch (_) {}
+  }
+
   List<Marker> _meterMarkers() {
-    LatLng origin;
     var z = 16.0;
     try {
-      origin = _map.camera.center;
       z = _map.camera.zoom;
-    } catch (_) {
-      origin = _me ??
-          (widget.parks.isNotEmpty
-              ? LatLng(widget.parks.first.lat, widget.parks.first.lng)
-              : hkCenter);
-    }
-    if (z < 14.5) return const [];
-    final scored = <({MeterStreet m, double d})>[];
-    for (final m in widget.meters) {
-      final d = Geolocator.distanceBetween(
-        origin.latitude,
-        origin.longitude,
-        m.lat,
-        m.lng,
-      );
-      if (d <= 2500) scored.add((m: m, d: d));
-    }
-    scored.sort((a, b) => a.d.compareTo(b.d));
+    } catch (_) {}
+    if (z < 16) return const [];
     return [
-      for (final e in scored.take(60))
+      for (final m in widget.meterSpaces)
         Marker(
-          point: LatLng(e.m.lat, e.m.lng),
-          width: 96,
-          height: 38,
-          alignment: Alignment.bottomCenter,
-          child: MeterChip(
-            label: e.m.chipLabel,
-            selected: e.m.id == widget.selectedMeterId,
-            onTap: () => widget.onSelectMeter?.call(e.m.id),
+          point: LatLng(m.lat, m.lng),
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          child: MeterBayDot(
+            status: widget.meterOccupancy[m.id]?.status ??
+                MeterBayStatus.suspended,
+            selected: m.id == widget.selectedMeterId,
+            onTap: () => widget.onSelectMeter?.call(m.id),
           ),
         ),
     ];

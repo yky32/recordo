@@ -3,6 +3,7 @@ import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/meter_street.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 
 /// Cloud catalog + UGC writes. Safe no-op if not configured / offline.
 class SupabaseParkRemote {
@@ -56,6 +57,37 @@ class SupabaseParkRemote {
       for (final e in list) {
         if (e is! Map) continue;
         final m = MeterStreet.tryParse(Map<String, dynamic>.from(e));
+        if (m != null) out.add(m);
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<MeterSpace>> fetchMeterSpacesInBbox({
+    required double minLat,
+    required double minLng,
+    required double maxLat,
+    required double maxLng,
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return const [];
+    try {
+      final raw = await c.rpc(
+        'meter_spaces_in_bbox',
+        params: {
+          'min_lat': minLat,
+          'min_lng': minLng,
+          'max_lat': maxLat,
+          'max_lng': maxLng,
+        },
+      );
+      final list = raw is List ? raw : const [];
+      final out = <MeterSpace>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        final m = MeterSpace.tryParse(Map<String, dynamic>.from(e));
         if (m != null) out.add(m);
       }
       return out;
