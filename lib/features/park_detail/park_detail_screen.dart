@@ -954,7 +954,7 @@ class _MiniMap extends StatelessWidget {
                 subdomains: const ['a', 'b', 'c', 'd'],
                 userAgentPackageName: 'com.recordo',
                 retinaMode: false,
-                maxNativeZoom: 19,
+                maxNativeZoom: UberColors.mapMaxNativeZoom,
               ),
               MarkerLayer(
                 markers: [
