@@ -103,20 +103,60 @@ abstract final class ParkNavigation {
     }
   }
 
-  static Uri appleMaps(Park p) {
-    final q = Uri.encodeComponent(p.name);
+  static Uri appleMapsLatLng(double lat, double lng, String name) {
+    final q = Uri.encodeComponent(name);
     return Uri.parse(
-      'https://maps.apple.com/?daddr=${p.lat},${p.lng}&q=$q&dirflg=d',
+      'https://maps.apple.com/?daddr=$lat,$lng&q=$q&dirflg=d',
     );
   }
 
-  static Uri googleMaps(Park p) {
+  static Uri googleMapsLatLng(double lat, double lng) {
     return Uri.parse(
       'https://www.google.com/maps/dir/?api=1'
-      '&destination=${p.lat},${p.lng}'
+      '&destination=$lat,$lng'
       '&travelmode=driving',
     );
   }
+
+  static Future<void> openDriving(
+    BuildContext context, {
+    required double lat,
+    required double lng,
+    required String name,
+  }) async {
+    HapticFeedback.selectionClick();
+    if (!kIsWeb && Platform.isIOS) {
+      final ok = await launchUrl(
+        appleMapsLatLng(lat, lng, name),
+        mode: LaunchMode.externalApplication,
+      );
+      if (ok) return;
+    }
+    await launchUrl(
+      googleMapsLatLng(lat, lng),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  /// Official TD 入錶易. We cannot take payment.
+  static const hkeMeterStoreHttps =
+      'https://apps.apple.com/hk/app/hkemeter/id1508101096';
+  static const hkeMeterStoreItms =
+      'itms-apps://itunes.apple.com/app/id1508101096';
+
+  static Future<void> openHkeMeter() async {
+    HapticFeedback.selectionClick();
+    final itms = Uri.parse(hkeMeterStoreItms);
+    final https = Uri.parse(hkeMeterStoreHttps);
+    final ok = await launchUrl(itms, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      await launchUrl(https, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  static Uri appleMaps(Park p) => appleMapsLatLng(p.lat, p.lng, p.name);
+
+  static Uri googleMaps(Park p) => googleMapsLatLng(p.lat, p.lng);
 
   static Uri geoUri(Park p) {
     final label = Uri.encodeComponent(p.name);

@@ -8,6 +8,7 @@ import 'package:recordo/app/routes.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
+import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/home/wedge_onboarding.dart';
@@ -282,6 +283,51 @@ class _HomeMapScreenState extends State<HomeMapScreen>
               Text(m.lppLabel, style: RType.body()),
               const SizedBox(height: 8),
               Text('收費 ${m.feeLabel}', style: RType.body()),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: UberColors.ctaFill,
+                    foregroundColor: UberColors.ctaOnFill,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ParkNavigation.openHkeMeter();
+                  },
+                  icon: const Icon(Icons.payments_outlined, size: 18),
+                  label: const Text('去入錶易繳費'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: UberColors.white,
+                    side: BorderSide(color: UberColors.hairline),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ParkNavigation.openDriving(
+                      context,
+                      lat: m.lat,
+                      lng: m.lng,
+                      name: '咪錶 ${m.id}',
+                    );
+                  },
+                  icon: const Icon(Icons.directions_rounded, size: 18),
+                  label: const Text('規劃路線'),
+                ),
+              ),
             ],
           ),
         );
@@ -462,6 +508,32 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                       ),
                     ),
                   ),
+                  if (catalog.meterSpaces.isNotEmpty)
+                    Positioned(
+                      top: MediaQuery.paddingOf(context).top +
+                          (active != null ? 128 : 64),
+                      left: 12,
+                      child: IgnorePointer(
+                        child: Row(
+                          children: const [
+                            _MeterLegendDot(
+                              color: Color(0xFF2FA86B),
+                              label: '空置',
+                            ),
+                            SizedBox(width: 8),
+                            _MeterLegendDot(
+                              color: Color(0xFFE24B4A),
+                              label: '已使用',
+                            ),
+                            SizedBox(width: 8),
+                            _MeterLegendDot(
+                              color: Color(0xFF8A8A8A),
+                              label: '暫停',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (active != null)
                     Positioned(
                       top: MediaQuery.paddingOf(context).top + 72,
@@ -897,6 +969,35 @@ class _LiveSessionTickerState extends State<_LiveSessionTicker> {
           Text(_fmt(elapsed), style: RType.titleSm()),
           const SizedBox(width: 4),
           Icon(Icons.chevron_right_rounded, color: UberColors.muted, size: 22),
+        ],
+      ),
+    );
+  }
+}
+
+class _MeterLegendDot extends StatelessWidget {
+  const _MeterLegendDot({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: UberColors.sheet.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(label, style: RType.muted()),
         ],
       ),
     );
