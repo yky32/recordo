@@ -143,6 +143,9 @@ Map<String, TdHourlyVacancy> matchTdToParks({
     var bestD = maxMeters;
     for (final t in live) {
       if (claimed.contains(t.parkId)) continue;
+      if ((p.lat - t.lat).abs() > 0.0012 || (p.lng - t.lng).abs() > 0.0012) {
+        continue;
+      }
       final d = Geolocator.distanceBetween(p.lat, p.lng, t.lat, t.lng);
       if (d <= bestD) {
         bestD = d;

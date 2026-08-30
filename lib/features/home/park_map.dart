@@ -203,6 +203,10 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
         widget.onLocateState?.call(false, '定位失敗 · 再試');
         return;
       }
+      if (result.demo) {
+        widget.onLocateState?.call(false, null);
+        return;
+      }
 
       final pos = Position(
         latitude: result.lat!,

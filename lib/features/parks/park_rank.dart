@@ -42,6 +42,48 @@ int compareParksForDisplay(
   return a.name.compareTo(b.name);
 }
 
+/// One geodesic per park, then sort. Do not call [compareParksForDisplay]
+/// with a center (that recomputes distance on every comparison).
+List<Park> sortParksForDisplay(
+  List<Park> list, {
+  required double? centerLat,
+  required double? centerLng,
+  bool preferWedge = true,
+}) {
+  if (centerLat != null && centerLng != null) {
+    final scored = <({Park p, double d})>[
+      for (final p in list)
+        (
+          p: p,
+          d: Geolocator.distanceBetween(centerLat, centerLng, p.lat, p.lng),
+        ),
+    ];
+    scored.sort((a, b) {
+      final byD = a.d.compareTo(b.d);
+      if (byD != 0) return byD;
+      return compareParksForDisplay(
+        a.p,
+        b.p,
+        centerLat: null,
+        centerLng: null,
+        preferWedge: false,
+      );
+    });
+    return [for (final e in scored) e.p];
+  }
+  final copy = List<Park>.from(list)
+    ..sort(
+      (a, b) => compareParksForDisplay(
+        a,
+        b,
+        centerLat: null,
+        centerLng: null,
+        preferWedge: preferWedge,
+      ),
+    );
+  return copy;
+}
+
 /// Split pipeline output for home sheet: featured vs collapsed remainder.
 ({List<Park> featured, List<Park> rest}) splitFeaturedRest(
   List<Park> sorted, {
