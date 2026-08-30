@@ -2,6 +2,7 @@ import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/meter_street.dart';
 
 /// Cloud catalog + UGC writes. Safe no-op if not configured / offline.
 class SupabaseParkRemote {
@@ -41,6 +42,25 @@ class SupabaseParkRemote {
       if (dump != null && dump.parks.isNotEmpty) return dump;
     } catch (_) {}
     return _fetchCatalogPaged();
+  }
+
+  Future<List<MeterStreet>> fetchMetersDump() async {
+    final c = RecordoSupabase.client;
+    if (c == null) return const [];
+    try {
+      final raw = await c.rpc('meters_dump');
+      if (raw is! Map) return const [];
+      final list = raw['meters'] as List? ?? const [];
+      final out = <MeterStreet>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        final m = MeterStreet.tryParse(Map<String, dynamic>.from(e));
+        if (m != null) out.add(m);
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Parks whose price_updated_at is after [since] (inclusive pad 1s).

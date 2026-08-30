@@ -13,6 +13,7 @@ import 'package:recordo/features/parks/price_verification.dart';
 import 'package:recordo/features/parks/supabase_park_remote.dart';
 import 'package:recordo/features/parks/sync_outbox.dart';
 import 'package:recordo/features/parks/sync_rules.dart';
+import 'package:recordo/features/parks/meter_street.dart';
 
 export 'package:recordo/features/parks/catalog_cache.dart' show CatalogSyncResult;
 
@@ -38,6 +39,8 @@ class ParkRepository {
 
   int get catalogVersion => _catalogVersion;
   bool get playingFromCloudSnapshot => _fromCloud;
+
+  Future<List<MeterStreet>> fetchMetersDump() => _remote.fetchMetersDump();
   int get osmCount => _catalog?.length ?? 0;
   int get baseCount => _catalog?.length ?? 0;
 

@@ -275,6 +275,54 @@ class ParkClusterChip extends StatelessWidget {
   }
 }
 
+class MeterChip extends StatelessWidget {
+  const MeterChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = selected ? const Color(0xFF3D7A5A) : const Color(0xFF1E1E1E);
+    final fg = Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0x33FFFFFF)),
+            ),
+            child: Text(
+              '咪 $label',
+              style: TextStyle(
+                color: fg,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
+            ),
+          ),
+          CustomPaint(
+            size: const Size(10, 6),
+            painter: _ChipPointerPainter(fill),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChipPointerPainter extends CustomPainter {
   _ChipPointerPainter(this.color);
   final Color color;

@@ -12,6 +12,7 @@ import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
 import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/meter_street.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
 import 'package:recordo/features/session/session_cubit.dart';
@@ -38,6 +39,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   final _bandTopY = ValueNotifier<double>(120);
   final _bandBottomY = ValueNotifier<double>(500);
   bool _locating = false;
+  String? _meterId;
   AnimationController? _sheetAnim;
 
   static const _sheetMin = 0.28;
@@ -240,6 +242,36 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     super.dispose();
   }
 
+  void _showMeterSheet(MeterStreet m) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(m.name, style: RType.titleSm()),
+              const SizedBox(height: 6),
+              Text(
+                '${m.district} · ${m.chipLabel}'
+                '${m.spacesCar > 0 ? ' · ${m.spacesCar} 位' : ''}',
+                style: RType.muted(),
+              ),
+              const SizedBox(height: 8),
+              Text('運輸署咪錶', style: RType.muted()),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _endSession(BuildContext context) async {
     await showEndSessionSheet(context);
   }
@@ -282,12 +314,27 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                   ParkMap(
                     key: _mapKey,
                     parks: catalog.allWindowParks,
+                    meters: catalog.meters,
                     selectedId: catalog.selectedId,
+                    selectedMeterId: _meterId,
                     bandTopY: _bandTopY,
                     bandBottomY: _bandBottomY,
                     onSelect: (id) {
                       hideKeyboard();
+                      setState(() => _meterId = null);
                       _selectAndAnchor(id, catalog.allWindowParks);
+                    },
+                    onSelectMeter: (id) {
+                      hideKeyboard();
+                      setState(() => _meterId = id);
+                      MeterStreet? m;
+                      for (final e in catalog.meters) {
+                        if (e.id == id) {
+                          m = e;
+                          break;
+                        }
+                      }
+                      if (m != null) _showMeterSheet(m);
                     },
                     onMapInteraction: hideKeyboard,
                     onUserLocation: (ll) => context

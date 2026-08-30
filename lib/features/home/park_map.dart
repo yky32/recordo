@@ -11,6 +11,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_clusters.dart';
 import 'package:recordo/features/parks/park.dart';
+import 'package:recordo/features/parks/meter_street.dart';
 
 /// Full-screen map. Parent overlays search/sheet.
 /// Band notifiers are read only when centering — sheet drag must not rebuild tiles.
@@ -26,6 +27,9 @@ class ParkMap extends StatefulWidget {
     this.onPinMoved,
     this.onLocateState,
     this.onMapInteraction,
+    this.meters = const [],
+    this.selectedMeterId,
+    this.onSelectMeter,
   });
 
   final List<Park> parks;
@@ -37,6 +41,9 @@ class ParkMap extends StatefulWidget {
   final ValueChanged<LatLng>? onPinMoved;
   final void Function(bool locating, String? error)? onLocateState;
   final VoidCallback? onMapInteraction;
+  final List<MeterStreet> meters;
+  final String? selectedMeterId;
+  final ValueChanged<String>? onSelectMeter;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -341,6 +348,38 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     }
   }
 
+  List<Marker> _meterMarkers() {
+    final origin = _me ??
+        (widget.parks.isNotEmpty
+            ? LatLng(widget.parks.first.lat, widget.parks.first.lng)
+            : hkCenter);
+    final scored = <({MeterStreet m, double d})>[];
+    for (final m in widget.meters) {
+      final d = Geolocator.distanceBetween(
+        origin.latitude,
+        origin.longitude,
+        m.lat,
+        m.lng,
+      );
+      if (d <= 2500) scored.add((m: m, d: d));
+    }
+    scored.sort((a, b) => a.d.compareTo(b.d));
+    return [
+      for (final e in scored.take(60))
+        Marker(
+          point: LatLng(e.m.lat, e.m.lng),
+          width: 92,
+          height: 36,
+          alignment: Alignment.bottomCenter,
+          child: MeterChip(
+            label: e.m.chipLabel,
+            selected: e.m.id == widget.selectedMeterId,
+            onTap: () => widget.onSelectMeter?.call(e.m.id),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final clusters = _clusters();
@@ -437,6 +476,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
             MarkerLayer(markers: pinMarkers),
             MarkerLayer(markers: clusterMarkers),
             if (selectedMarker != null) MarkerLayer(markers: [selectedMarker]),
+            MarkerLayer(markers: _meterMarkers()),
             if (_me != null)
               MarkerLayer(
                 markers: [

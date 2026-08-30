@@ -8,6 +8,7 @@ import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
 import 'package:recordo/features/parks/td_parking_client.dart';
 import 'package:recordo/features/parks/td_vacancy.dart';
+import 'package:recordo/features/parks/meter_street.dart';
 
 class ParkCatalogState {
   const ParkCatalogState({
@@ -27,6 +28,7 @@ class ParkCatalogState {
     this.communityPaidByPark = const {},
     this.communityPaidLoading = const {},
     this.tdVacancyByParkId = const {},
+    this.meters = const [],
   });
 
   final List<Park> parks;
@@ -49,6 +51,7 @@ class ParkCatalogState {
   final Set<String> communityPaidLoading;
   /// TD participating lots only. Never written into catalog_dump.
   final Map<String, TdHourlyVacancy> tdVacancyByParkId;
+  final List<MeterStreet> meters;
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -90,6 +93,7 @@ class ParkCatalogState {
     Map<String, List<CommunityPaidSession>>? communityPaidByPark,
     Set<String>? communityPaidLoading,
     Map<String, TdHourlyVacancy>? tdVacancyByParkId,
+    List<MeterStreet>? meters,
     bool clearSelected = false,
   }) {
     return ParkCatalogState(
@@ -109,6 +113,7 @@ class ParkCatalogState {
       communityPaidByPark: communityPaidByPark ?? this.communityPaidByPark,
       communityPaidLoading: communityPaidLoading ?? this.communityPaidLoading,
       tdVacancyByParkId: tdVacancyByParkId ?? this.tdVacancyByParkId,
+      meters: meters ?? this.meters,
     );
   }
 }
@@ -152,6 +157,15 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       _emitCatalog();
     }
     await refreshTdVacancy();
+    await refreshMeters();
+  }
+
+  Future<void> refreshMeters() async {
+    try {
+      final meters = await _repo.fetchMetersDump();
+      if (isClosed) return;
+      emit(state.copyWith(meters: meters));
+    } catch (_) {}
   }
 
   Future<void> refreshTdVacancy() async {
