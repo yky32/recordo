@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/park_clusters.dart';
@@ -355,6 +356,129 @@ class MeterBayDot extends StatelessWidget {
             color: Colors.white,
             width: selected ? 2 : 1.2,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class MeterCallout extends StatelessWidget {
+  const MeterCallout({
+    super.key,
+    required this.space,
+    required this.status,
+    required this.onClose,
+    required this.onPay,
+    required this.onRoute,
+  });
+
+  final MeterSpace space;
+  final MeterBayStatus? status;
+  final VoidCallback onClose;
+  final VoidCallback onPay;
+  final VoidCallback onRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    final occ = switch (status) {
+      MeterBayStatus.vacant => '空置',
+      MeterBayStatus.occupied => '已使用',
+      MeterBayStatus.suspended => '暫停',
+      null => '無數據',
+    };
+    final occColor = switch (status) {
+      MeterBayStatus.vacant => const Color(0xFF2FA86B),
+      MeterBayStatus.occupied => const Color(0xFFE24B4A),
+      MeterBayStatus.suspended => const Color(0xFF8A8A8A),
+      null => UberColors.muted,
+    };
+    final stay = space.lppLabel.replaceFirst('最長停泊時間 ', '');
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 228,
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
+        decoration: BoxDecoration(
+          color: UberColors.sheet,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: UberColors.hairline),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(space.id, style: RType.titleSm()),
+                ),
+                GestureDetector(
+                  onTap: onClose,
+                  child: Icon(Icons.close, size: 16, color: UberColors.muted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(space.placeLine, style: RType.muted(), maxLines: 2),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: occColor.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    occ,
+                    style: RType.label().copyWith(color: occColor, fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(stay, style: RType.label()),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(space.feeLabel.replaceFirst(' - ', ' / '), style: RType.body()),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: UberColors.ctaFill,
+                      foregroundColor: UberColors.ctaOnFill,
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onPressed: onPay,
+                    child: const Text('入錶易', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: UberColors.white,
+                      side: BorderSide(color: UberColors.hairline),
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onPressed: onRoute,
+                    child: const Text('路線', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
