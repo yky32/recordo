@@ -91,7 +91,7 @@ def fetch_rows() -> list[dict]:
             if not district or not street:
                 continue
             cls = hours_key(raw_cls)
-            mid = f"td:{district}:{street}"
+            mid = f"td:{district}:{street}:{raw_cls}"
             if mid in seen:
                 continue
             seen.add(mid)
