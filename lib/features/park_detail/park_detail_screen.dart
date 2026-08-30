@@ -268,6 +268,8 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         [
                           p.district,
                           if (dist.isNotEmpty) dist,
+                          if (state.tdVacancyFor(p.id) != null)
+                            state.tdVacancyFor(p.id)!.label,
                         ].where((s) => s.isNotEmpty).join(' · '),
                         style: RType.muted(),
                       ),

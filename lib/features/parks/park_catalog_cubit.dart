@@ -6,6 +6,8 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/park_rank.dart';
 import 'package:recordo/features/parks/park_repository.dart';
+import 'package:recordo/features/parks/td_parking_client.dart';
+import 'package:recordo/features/parks/td_vacancy.dart';
 
 class ParkCatalogState {
   const ParkCatalogState({
@@ -24,6 +26,7 @@ class ParkCatalogState {
     this.fromCloud = false,
     this.communityPaidByPark = const {},
     this.communityPaidLoading = const {},
+    this.tdVacancyByParkId = const {},
   });
 
   final List<Park> parks;
@@ -44,6 +47,8 @@ class ParkCatalogState {
   final bool fromCloud;
   final Map<String, List<CommunityPaidSession>> communityPaidByPark;
   final Set<String> communityPaidLoading;
+  /// TD participating lots only. Never written into catalog_dump.
+  final Map<String, TdHourlyVacancy> tdVacancyByParkId;
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -52,6 +57,8 @@ class ParkCatalogState {
 
   bool communityPaidLoadingFor(String parkId) =>
       communityPaidLoading.contains(parkId);
+
+  TdHourlyVacancy? tdVacancyFor(String parkId) => tdVacancyByParkId[parkId];
 
   /// Featured + collapsed remainder — for map pins in the current window.
   List<Park> get allWindowParks => [...parks, ...restParks];
@@ -82,6 +89,7 @@ class ParkCatalogState {
     bool? fromCloud,
     Map<String, List<CommunityPaidSession>>? communityPaidByPark,
     Set<String>? communityPaidLoading,
+    Map<String, TdHourlyVacancy>? tdVacancyByParkId,
     bool clearSelected = false,
   }) {
     return ParkCatalogState(
@@ -100,16 +108,19 @@ class ParkCatalogState {
       fromCloud: fromCloud ?? this.fromCloud,
       communityPaidByPark: communityPaidByPark ?? this.communityPaidByPark,
       communityPaidLoading: communityPaidLoading ?? this.communityPaidLoading,
+      tdVacancyByParkId: tdVacancyByParkId ?? this.tdVacancyByParkId,
     );
   }
 }
 
 class ParkCatalogCubit extends Cubit<ParkCatalogState> {
-  ParkCatalogCubit({ParkRepository? repo})
+  ParkCatalogCubit({ParkRepository? repo, TdParkingClient? td})
       : _repo = repo ?? ParkRepository(),
+        _td = td ?? TdParkingClient(),
         super(const ParkCatalogState());
 
   final ParkRepository _repo;
+  final TdParkingClient _td;
 
   void _emitCatalog({bool loading = false}) {
     final all = _repo.allWithUgc();
@@ -139,6 +150,18 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     await _repo.flushOutbox();
     if (result == CatalogSyncResult.updated) {
       _emitCatalog();
+    }
+    await refreshTdVacancy();
+  }
+
+  Future<void> refreshTdVacancy() async {
+    try {
+      final live = await _td.fetchLive();
+      if (isClosed) return;
+      final mapped = matchTdToParks(parks: _repo.allWithUgc(), live: live);
+      emit(state.copyWith(tdVacancyByParkId: mapped));
+    } catch (_) {
+      // Participating feed is optional — keep catalog.
     }
   }
 
