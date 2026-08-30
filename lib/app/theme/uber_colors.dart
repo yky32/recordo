@@ -65,11 +65,14 @@ abstract final class UberColors {
   static Color get ctaOnFill =>
       _dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 
-  /// Raster basemap — no vendor API key (CARTO now watermarks "API KEY REQUIRED").
-  /// Dark: Esri World Dark Gray. Light: OSM (CARTO Voyager also needs a key).
+  /// Raster basemap — no vendor API key (CARTO watermarks "API KEY REQUIRED").
+  /// Dark: Esri World Dark Gray (native max **16** — z17+ is a JPEG that says
+  /// "Map data not yet available"). Light: OSM.
   static String get mapTileUrl => _dark
       ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
       : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  static int get mapMaxNativeZoom => _dark ? 16 : 19;
 
   static const mapTileFallback =
       'https://tile.openstreetmap.org/{z}/{x}/{y}.png';

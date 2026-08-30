@@ -414,7 +414,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
               subdomains: const ['a', 'b', 'c', 'd'],
               userAgentPackageName: 'com.recordo',
               retinaMode: false,
-              maxNativeZoom: 19,
+              maxNativeZoom: UberColors.mapMaxNativeZoom,
               errorTileCallback: (tile, error, stackTrace) {
                 if (kDebugMode) {
                   debugPrint('Tile error ${tile.coordinates}: $error');
