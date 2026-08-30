@@ -31,6 +31,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   /// Keys so map pin select can [Scrollable.ensureVisible] the list row.
   final _itemKeys = <String, GlobalKey>{};
   final _listScroll = ScrollController();
+  final _searchCtrl = TextEditingController();
 
   /// Sheet height as a fraction of screen. Only the handle drags this.
   final _sheetExtent = ValueNotifier<double>(_sheetInit);
@@ -232,6 +233,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   void dispose() {
     _sheetAnim?.dispose();
     _listScroll.dispose();
+    _searchCtrl.dispose();
     _sheetExtent.dispose();
     _bandTopY.dispose();
     _bandBottomY.dispose();
@@ -318,6 +320,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                               shadowColor: Colors.black54,
                               borderRadius: BorderRadius.circular(16),
                               child: TextField(
+                                controller: _searchCtrl,
                                 onChanged: (v) => context
                                     .read<ParkCatalogCubit>()
                                     .setQuery(v),
@@ -333,6 +336,21 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                     Icons.search_rounded,
                                     color: UberColors.muted,
                                   ),
+                                  suffixIcon: catalog.query.trim().isEmpty
+                                      ? null
+                                      : IconButton(
+                                          tooltip: '清除',
+                                          onPressed: () {
+                                            _searchCtrl.clear();
+                                            context
+                                                .read<ParkCatalogCubit>()
+                                                .setQuery('');
+                                          },
+                                          icon: Icon(
+                                            Icons.close_rounded,
+                                            color: UberColors.muted,
+                                          ),
+                                        ),
                                   border: InputBorder.none,
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 8,
