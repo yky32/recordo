@@ -49,6 +49,7 @@ class ParkingSession {
   }
 
   ParkingSession copyWith({
+    DateTime? startedAt,
     DateTime? endedAt,
     String? parkId,
     String? parkName,
@@ -57,7 +58,7 @@ class ParkingSession {
   }) {
     return ParkingSession(
       id: id,
-      startedAt: startedAt,
+      startedAt: startedAt ?? this.startedAt,
       endedAt: endedAt ?? this.endedAt,
       parkId: parkId ?? this.parkId,
       parkName: parkName ?? this.parkName,
@@ -65,4 +66,21 @@ class ParkingSession {
       note: note ?? this.note,
     );
   }
+}
+
+/// Forgot to start before leaving the car. Cap: not future, not >24h ago.
+DateTime clampSessionStart(DateTime wanted, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final earliest = n.subtract(const Duration(hours: 24));
+  if (wanted.isAfter(n)) return n;
+  if (wanted.isBefore(earliest)) return earliest;
+  return wanted;
+}
+
+/// Time-of-day picker: later than now ⇒ yesterday (overnight).
+DateTime sessionStartFromClock(int hour, int minute, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  var dt = DateTime(n.year, n.month, n.day, hour, minute);
+  if (dt.isAfter(n)) dt = dt.subtract(const Duration(days: 1));
+  return clampSessionStart(dt, now: n);
 }

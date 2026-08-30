@@ -125,6 +125,22 @@ class SessionCubit extends Cubit<SessionState> {
     );
   }
 
+  /// Driver forgot to start before leaving the car.
+  Future<void> adjustStartedAt(DateTime wanted) async {
+    final a = state.active;
+    if (a == null) return;
+    final next = clampSessionStart(wanted);
+    if (next.difference(a.startedAt).inSeconds.abs() < 30) return;
+    final s = a.copyWith(startedAt: next);
+    await Bootstrap.store.setJson(StorageKeys.activeSession, s.toJson());
+    emit(state.copyWith(active: s));
+    await LiveActivityService.instance.startForSession(s);
+    await RemindLogService.instance.scheduleForSession(
+      sessionId: s.id,
+      startedAt: s.startedAt,
+    );
+  }
+
   Future<void> end({
     required double amountHkd,
     String note = '',

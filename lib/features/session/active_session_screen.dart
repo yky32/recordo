@@ -12,6 +12,7 @@ import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
+import 'package:recordo/features/session/parking_session.dart';
 import 'package:recordo/features/session/session_alarm_service.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 
@@ -49,6 +50,80 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         context.go('/');
       }
     }
+  }
+
+  Future<void> _editStart(DateTime current) async {
+    final picked = await showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        Widget chip(String label, Duration back) {
+          return ActionChip(
+            label: Text(label),
+            onPressed: () => Navigator.pop(
+              ctx,
+              DateTime.now().subtract(back),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('改入車時間', style: RType.titleSm()),
+                const SizedBox(height: 6),
+                Text(
+                  '落車先記得開計時好常見。計時同預估會跟新時間。',
+                  style: RType.muted(),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    chip('早 15 分', const Duration(minutes: 15)),
+                    chip('早 30 分', const Duration(minutes: 30)),
+                    chip('早 1 小時', const Duration(hours: 1)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: UberColors.white,
+                      side: BorderSide(color: UberColors.hairline),
+                    ),
+                    onPressed: () async {
+                      final t = await showTimePicker(
+                        context: ctx,
+                        initialTime: TimeOfDay.fromDateTime(current),
+                      );
+                      if (!ctx.mounted || t == null) return;
+                      Navigator.pop(
+                        ctx,
+                        sessionStartFromClock(t.hour, t.minute),
+                      );
+                    },
+                    child: const Text('揀入車時間'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    await context.read<SessionCubit>().adjustStartedAt(picked);
   }
 
   @override
@@ -162,7 +237,21 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         style: RType.title(),
                       ),
                       const SizedBox(height: 8),
-                      Text(startLabel, style: RType.muted()),
+                      GestureDetector(
+                        onTap: () => _editStart(started),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(startLabel, style: RType.muted()),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 14,
+                              color: UberColors.muted,
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 36),
                       Text(
                         '泊咗',
