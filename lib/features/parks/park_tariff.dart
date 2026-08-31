@@ -183,6 +183,8 @@ class TariffValidation {
     required this.spend,
     required this.freeHours,
     this.entryAfter,
+    this.repeat = false,
+    this.capHours,
   });
 
   final String days;
@@ -190,18 +192,29 @@ class TariffValidation {
   final double freeHours;
   final String? entryAfter;
 
+  /// 每滿 $spend → freeHours (ELEMENTS / 海港城). False = 滿 $spend 一次.
+  final bool repeat;
+
+  /// Cap on free hours when [repeat] is true.
+  final double? capHours;
+
   String get daysLabel => tariffDaysLabel(days);
 
   String line({String currency = 'HKD'}) {
-    final hrs = freeHours == freeHours.roundToDouble()
-        ? freeHours.toStringAsFixed(0)
-        : freeHours.toString();
+    final hrs = _hoursLabel(freeHours);
     final money = moneyLabel(spend, currency);
+    final verb = repeat ? '每滿' : '滿';
+    final cap = capHours == null
+        ? ''
+        : '（最高 ${_hoursLabel(capHours!)} 小時）';
     if (entryAfter != null && entryAfter!.isNotEmpty) {
-      return '$daysLabel · $entryAfter 後入車，滿 $money：免 $hrs 小時';
+      return '$daysLabel · $entryAfter 後入車，$verb $money：免 $hrs 小時$cap';
     }
-    return '$daysLabel · 滿 $money：免 $hrs 小時';
+    return '$daysLabel · $verb $money：免 $hrs 小時$cap';
   }
+
+  static String _hoursLabel(double h) =>
+      h == h.roundToDouble() ? h.toStringAsFixed(0) : h.toString();
 
   static TariffValidation? tryParse(Map<String, dynamic> m) {
     final spend = _num(m['spend'] ?? m['spendHkd']);
@@ -213,6 +226,8 @@ class TariffValidation {
       spend: spend,
       freeHours: hours,
       entryAfter: after.isEmpty ? null : after,
+      repeat: _bool(m['repeat']),
+      capHours: _num(m['capHours'] ?? m['cap_hours']),
     );
   }
 
@@ -221,6 +236,8 @@ class TariffValidation {
         'spend': spend,
         'freeHours': freeHours,
         if (entryAfter != null) 'entryAfter': entryAfter,
+        if (repeat) 'repeat': true,
+        if (capHours != null) 'capHours': capHours,
       };
 }
 
@@ -234,6 +251,15 @@ double? _num(dynamic v) {
   if (v == null) return null;
   if (v is num) return v.toDouble();
   return double.tryParse('$v');
+}
+
+bool _bool(dynamic v) {
+  if (v == true || v == 1) return true;
+  if (v is String) {
+    final s = v.trim().toLowerCase();
+    return s == 'true' || s == '1' || s == 'yes';
+  }
+  return false;
 }
 
 String _currencyCode(dynamic raw) {

@@ -133,4 +133,37 @@ void main() {
     expect(t.weekdayPeakHourly, 30);
     expect(ParkTariff.tryParse(t.toJson())!.unitMinutes, 20);
   });
+
+  test('repeat + capHours is 每滿 not five fake thresholds', () {
+    final t = ParkTariff.tryParse({
+      'unitMinutes': 60,
+      'bands': [
+        {
+          'days': 'daily',
+          'kind': 'peak',
+          'start': '00:00',
+          'end': '24:00',
+          'amount': 26,
+        },
+      ],
+      'validations': [
+        {
+          'days': 'daily',
+          'spend': 100,
+          'freeHours': 1,
+          'repeat': true,
+          'capHours': 5,
+        },
+      ],
+    });
+    final line = t!.validations.single.line();
+    expect(line, contains('每滿'));
+    expect(line, contains('100'));
+    expect(line, contains('最高 5 小時'));
+    expect(t.toJson()['validations'][0]['repeat'], isTrue);
+    expect(t.toJson()['validations'][0]['capHours'], 5);
+    final again = ParkTariff.tryParse(t.toJson())!;
+    expect(again.validations.single.repeat, isTrue);
+    expect(again.validations.single.capHours, 5);
+  });
 }
