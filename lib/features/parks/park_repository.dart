@@ -34,6 +34,8 @@ class ParkRepository {
   final SyncOutbox _outbox;
 
   List<Park>? _catalog;
+  List<Park>? _ugcView;
+  Map<String, Park>? _byId;
   int _catalogVersion = 0;
   DateTime? _pricesUpdatedAt;
   bool _fromCloud = false;
@@ -55,6 +57,16 @@ class ParkRepository {
         maxLat: maxLat,
         maxLng: maxLng,
       );
+  void _invalidateUgcView() {
+    _ugcView = null;
+    _byId = null;
+  }
+
+  void _setCatalog(List<Park> parks) {
+    _catalog = parks;
+    _invalidateUgcView();
+  }
+
   int get osmCount => _catalog?.length ?? 0;
   int get baseCount => _catalog?.length ?? 0;
 
@@ -63,13 +75,13 @@ class ParkRepository {
     if (_catalog != null && _catalog!.isNotEmpty) return;
     final snap = await _cache.read();
     if (snap != null && snap.parks.isNotEmpty) {
-      _catalog = snap.parks;
+      _setCatalog(snap.parks);
       _catalogVersion = snap.version;
       _pricesUpdatedAt = snap.pricesUpdatedAt;
       _fromCloud = snap.version > 0;
       return;
     }
-    _catalog = await _loadBundledFallback();
+    _setCatalog(await _loadBundledFallback());
     _catalogVersion = 0;
     _fromCloud = false;
   }
@@ -103,7 +115,7 @@ class ParkRepository {
               ? CatalogSyncResult.unchanged
               : CatalogSyncResult.offline;
         }
-        _catalog = dump.parks;
+        _setCatalog(dump.parks);
         _catalogVersion = dump.version == 0 ? meta.version : dump.version;
         _pricesUpdatedAt = meta.pricesUpdatedAt ?? dump.pricesUpdatedAt;
         _fromCloud = true;
@@ -180,7 +192,7 @@ class ParkRepository {
             : old.priceProvenance,
       );
     }
-    _catalog = byId.values.toList();
+    _setCatalog(byId.values.toList());
   }
 
   Future<void> _remapAndPruneOverlay() async {
@@ -211,6 +223,7 @@ class ParkRepository {
       next[id] = local;
     }
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, next);
+    _invalidateUgcView();
   }
 
   Future<void> refreshRemote() async {
@@ -385,6 +398,7 @@ class ParkRepository {
   }
 
   List<Park> allWithUgc() {
+    if (_ugcView != null) return _ugcView!;
     final base = _catalog ?? List<Park>.from(hkSeedParks);
     final localNews = _localUgcNewParks();
     final ids = base.map((e) => e.id).toSet();
@@ -395,15 +409,14 @@ class ParkRepository {
     for (final p in combined) {
       if (seen.add(p.id)) unique.add(p);
     }
-    return unique.map(_applyPrices).toList();
+    _ugcView = unique.map(_applyPrices).toList();
+    _byId = {for (final p in _ugcView!) p.id: p};
+    return _ugcView!;
   }
 
   Park? byId(String id) {
-    try {
-      return allWithUgc().firstWhere((e) => e.id == id);
-    } catch (_) {
-      return null;
-    }
+    _byId ??= {for (final p in allWithUgc()) p.id: p};
+    return _byId![id];
   }
 
   /// Returns true if shared to Supabase (false = local only / offline / no key).
@@ -461,6 +474,7 @@ class ParkRepository {
       'unitAmount': ?unitAmount,
     };
     await Bootstrap.store.setJson(StorageKeys.ugcPrices, map);
+    _invalidateUgcView();
 
     final hourlyOut = h ?? (existing['hourlyHkd'] as num?)?.toDouble();
     final dailyOut = d ?? (existing['dailyHkd'] as num?)?.toDouble();
@@ -560,6 +574,7 @@ class ParkRepository {
     final list = Bootstrap.store.getJsonList(StorageKeys.ugcNewParks);
     list.insert(0, parkMap);
     await Bootstrap.store.setJson(StorageKeys.ugcNewParks, list);
+    _invalidateUgcView();
 
     final park = Park(
       id: id,
