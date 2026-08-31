@@ -1039,26 +1039,7 @@ class _ParkTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!park.hasPrice)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    park.priceBadgeLabel,
-                    style: RType.label().copyWith(
-                      color: park.isVerifiedPrice
-                          ? UberColors.accent
-                          : UberColors.muted,
-                    ),
-                  ),
-                )
-              else if (park.isSeedDemoPrice)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    park.priceBadgeLabel,
-                    style: RType.label().copyWith(color: UberColors.muted),
-                  ),
-                ),
+              _PriceTrustIcon(park: park),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 tooltip: '詳情',
@@ -1071,6 +1052,37 @@ class _ParkTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PriceTrustIcon extends StatelessWidget {
+  const _PriceTrustIcon({required this.park});
+
+  final Park park;
+
+  @override
+  Widget build(BuildContext context) {
+    final IconData icon;
+    final Color color;
+    if (park.isOperatorOfficial) {
+      icon = Icons.verified_rounded;
+      color = UberColors.accent;
+    } else if (park.isVerifiedPrice) {
+      icon = Icons.fact_check_rounded;
+      color = UberColors.accent;
+    } else if (park.isSeedDemoPrice || park.hasPrice) {
+      icon = Icons.help_outline_rounded;
+      color = UberColors.muted;
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: Tooltip(
+        message: park.priceBadgeLabel,
+        child: Icon(icon, size: 18, color: color),
       ),
     );
   }
