@@ -26,6 +26,13 @@ class TdParkingClient {
   DateTime? _occAt;
   Map<String, MeterOccupancy> _occ = const {};
 
+  Map<String, MeterOccupancy> get occupancyCache => _occ;
+
+  bool occupancyFresh({Duration ttl = const Duration(seconds: 45)}) {
+    if (_occ.isEmpty || _occAt == null) return false;
+    return DateTime.now().difference(_occAt!) < ttl;
+  }
+
   Future<List<TdHourlyVacancy>> fetchLive() async {
     final basicRes = await _dio.get<dynamic>(basicInfoUrl);
     final vacRes = await _dio.get<dynamic>(vacancyUrl);

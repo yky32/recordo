@@ -66,6 +66,7 @@ class Park {
     this.tariff,
     this.ev,
     this.address = '',
+    this.tdParkId = '',
   });
 
   final String id;
@@ -90,6 +91,9 @@ class Park {
 
   /// Full street address. Search + detail. Empty until catalog has it.
   final String address;
+
+  /// TD `hk-td-tis_5` park_id. Vacancy joins on this, not 80m guess.
+  final String tdParkId;
 
   bool get hasPrice =>
       hourlyHkd != null ||
@@ -240,6 +244,7 @@ class Park {
     ParkTariff? tariff,
     ParkEv? ev,
     String? address,
+    String? tdParkId,
     bool clearPriceVerifiedAt = false,
   }) {
     return Park(
@@ -265,6 +270,7 @@ class Park {
       tariff: tariff ?? this.tariff,
       ev: ev ?? this.ev,
       address: address ?? this.address,
+      tdParkId: tdParkId ?? this.tdParkId,
     );
   }
 
@@ -289,6 +295,7 @@ class Park {
         if (tariff != null) 'tariff': tariff!.toJson(),
         if (ev != null) 'ev': ev!.toJson(),
         if (address.isNotEmpty) 'address': address,
+        if (tdParkId.isNotEmpty) 'tdParkId': tdParkId,
       };
 
   factory Park.fromJson(Map<String, dynamic> m) {
@@ -319,6 +326,7 @@ class Park {
       tariff: ParkTariff.tryParse(m['tariff']),
       ev: ParkEv.tryParse(m['ev']),
       address: '${m['address'] ?? ''}'.trim(),
+      tdParkId: '${m['tdParkId'] ?? m['td_park_id'] ?? ''}'.trim(),
     );
   }
 }

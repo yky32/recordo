@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:recordo/core/location/user_location.dart';
@@ -239,9 +240,14 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
         maxLat: maxLat,
         maxLng: maxLng,
       );
-      final occ = await _td.fetchMeterOccupancy();
       if (isClosed || seq != _meterSeq) return;
+      var occ = _td.occupancyCache;
       emit(state.copyWith(meterSpaces: spaces, meterOccupancy: occ));
+      if (!_td.occupancyFresh()) {
+        occ = await _td.fetchMeterOccupancy();
+        if (isClosed || seq != _meterSeq) return;
+        emit(state.copyWith(meterOccupancy: occ));
+      }
     } catch (_) {}
   }
 
@@ -249,7 +255,28 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     try {
       final live = await _td.fetchLive();
       if (isClosed) return;
-      final mapped = matchTdToParks(parks: _repo.allWithUgc(), live: live);
+      final parks = _repo.allWithUgc();
+      final payload = <String, dynamic>{
+        'parks': [
+          for (final p in parks)
+            {
+              'id': p.id,
+              'name': p.name,
+              'lat': p.lat,
+              'lng': p.lng,
+              'tdParkId': p.tdParkId,
+            },
+        ],
+        'live': [for (final t in live) t.toJson()],
+      };
+      final raw = await compute(matchTdToParksIsolate, payload);
+      if (isClosed) return;
+      final mapped = <String, TdHourlyVacancy>{
+        for (final e in raw.entries)
+          e.key: TdHourlyVacancy.fromJson(
+            Map<String, dynamic>.from(e.value as Map),
+          ),
+      };
       emit(state.copyWith(tdVacancyByParkId: mapped));
     } catch (_) {
       // Participating feed is optional — keep catalog.
