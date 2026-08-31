@@ -73,6 +73,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
   bool _programmaticMove = false;
   AnimationController? _camAnim;
   Timer? _pinDebounce;
+  final _meterShownAt = <String, LatLng>{};
 
   @override
   void initState() {
@@ -381,40 +382,54 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
   }
 
   List<Marker> _meterMarkers() {
+    _meterShownAt.clear();
     var z = 16.0;
     try {
       z = _map.camera.zoom;
     } catch (_) {}
     if (z < 16) return const [];
+    if (widget.meterSpaces.isEmpty) return const [];
+
+    final lat0 = widget.meterSpaces.first.lat;
+    final cosLat = math.cos(lat0 * math.pi / 180).clamp(0.25, 1.0);
+    final mPerPx = 156543.03392 * cosLat / math.pow(2, z);
+    // Group anything that would overlap on screen (~18px), not only identical 5dp.
+    final cellLat = (mPerPx * 18) / 111320.0;
+    final cellLng = cellLat / cosLat;
     final groups = <String, List<MeterSpace>>{};
     for (final m in widget.meterSpaces) {
-      final k = '${m.lat.toStringAsFixed(5)},${m.lng.toStringAsFixed(5)}';
+      final k =
+          '${(m.lat / cellLat).round()},${(m.lng / cellLng).round()}';
       (groups[k] ??= []).add(m);
     }
+
     final out = <Marker>[];
     for (final g in groups.values) {
       final n = g.length;
       final origin = g.first;
-      final cosLat = math.cos(origin.lat * math.pi / 180).clamp(0.25, 1.0);
-      final mPerPx = 156543.03392 * cosLat / math.pow(2, z);
-      // z16 + 0.00004° was ~2px — CEO candy stack. Spread in *screen* px.
       final radiusPx = n <= 1
           ? 0.0
-          : math.min(56.0, math.max(22.0, (n * 18) / (2 * math.pi)));
+          : math.min(64.0, math.max(28.0, (n * 20) / (2 * math.pi)));
       final rLat = (mPerPx * radiusPx) / 111320.0;
       final rLng = rLat / cosLat;
       for (var i = 0; i < n; i++) {
         final m = g[i];
-        var lat = m.lat;
-        var lng = m.lng;
+        var lat = origin.lat;
+        var lng = origin.lng;
         if (n > 1) {
-          final a = (2 * math.pi * i) / n;
-          lat += rLat * math.sin(a);
-          lng += rLng * math.cos(a);
+          final ring = i ~/ 12;
+          final idx = i % 12;
+          final onRing = math.min(12, n - ring * 12);
+          final a = (2 * math.pi * idx) / onRing;
+          final scale = 1.0 + ring * 0.75;
+          lat += rLat * scale * math.sin(a);
+          lng += rLng * scale * math.cos(a);
         }
+        final pt = LatLng(lat, lng);
+        _meterShownAt[m.id] = pt;
         out.add(
           Marker(
-            point: LatLng(lat, lng),
+            point: pt,
             width: 18,
             height: 18,
             alignment: Alignment.center,
@@ -445,7 +460,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     }
     if (m == null) return null;
     return Marker(
-      point: LatLng(m.lat, m.lng),
+      point: _meterShownAt[m.id] ?? LatLng(m.lat, m.lng),
       width: 240,
       height: 168,
       alignment: Alignment.centerLeft,
