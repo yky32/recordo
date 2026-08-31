@@ -101,4 +101,36 @@ void main() {
     expect(mapped['plus']?.parkId, 'td-plus');
     expect(mapped['plus']?.vacancy, 9);
   });
+
+  test('isolate payload round-trips the same join', () {
+    final raw = matchTdToParksIsolate({
+      'parks': [
+        {
+          'id': 'plus',
+          'name': 'YOHO PLUS',
+          'lat': 22.445,
+          'lng': 114.035,
+          'tdParkId': 'td-plus',
+        },
+      ],
+      'live': [
+        {
+          'parkId': 'td-plus',
+          'nameTc': 'PLUS',
+          'lat': 22.45,
+          'lng': 114.04,
+          'vacancy': 9,
+        },
+        {
+          'parkId': 'td-mall',
+          'nameTc': '形點 II',
+          'lat': 22.4451,
+          'lng': 114.0351,
+          'vacancy': 0,
+        },
+      ],
+    });
+    expect(raw['plus']['parkId'], 'td-plus');
+    expect(raw['plus']['vacancy'], 9);
+  });
 }
