@@ -249,9 +249,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;
+    final kb = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = kb > 8;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      // ClipVal: sheet owns the keyboard. Don't shrink the map.
+      resizeToAvoidBottomInset: false,
       body: BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
         builder: (context, catalog) {
           return BlocBuilder<SessionCubit, SessionState>(
@@ -451,7 +454,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     builder: (context, extent, _) {
                       return Positioned(
                         right: 16,
-                        bottom: screenH * extent + 12,
+                        bottom: screenH * extent + 12 + kb,
                         child: Material(
                           color: ThemeController.instance.isDark
                               ? const Color(0xFF1C1C1E)
@@ -714,14 +717,25 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     builder: (context, child) {
                       return Align(
                         alignment: Alignment.bottomCenter,
-                        child: SizedBox(
-                          height: screenH * _sheetExtent.value,
-                          width: double.infinity,
-                          child: child,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: kb),
+                          child: SizedBox(
+                            height: screenH * _sheetExtent.value,
+                            width: double.infinity,
+                            child: child,
+                          ),
                         ),
                       );
                     },
                   ),
+                  if (keyboardOpen)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: kb + 2,
+                      child: ColoredBox(color: UberColors.sheet),
+                    ),
                 ],
               );
             },
