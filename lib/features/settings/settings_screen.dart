@@ -139,7 +139,7 @@ class _SettingsBody extends StatelessWidget {
               _NavRow(
                 icon: Icons.receipt_long_rounded,
                 title: '泊車記錄',
-                subtitle: '本月合計 · 過往 session',
+                subtitle: '本月合計 · 過往記錄',
                 onTap: () => context.push('/history'),
               ),
               _NavRow(
@@ -183,7 +183,7 @@ class _SettingsBody extends StatelessWidget {
                       _ToggleRow(
                         icon: Icons.wb_sunny_outlined,
                         title: '淺色模式',
-                        subtitle: 'Uber light · 地圖改浅底',
+                        subtitle: '地圖改淺底',
                         value: !ThemeController.instance.isDark,
                         onChanged: (v) {
                           ThemeController.instance.setMode(
