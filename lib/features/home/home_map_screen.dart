@@ -10,7 +10,6 @@ import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/park_map.dart';
-import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
@@ -51,7 +50,6 @@ class _HomeMapScreenState extends State<HomeMapScreen>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _measureChrome();
-      if (mounted) showWedgeExplainerIfNeeded(context);
     });
   }
 
