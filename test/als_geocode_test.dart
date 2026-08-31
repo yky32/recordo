@@ -8,6 +8,8 @@ void main() {
   <SuggestedAddress>
     <Address>
       <PremisesAddress>
+        <StreetName>廣東道</StreetName>
+        <BuildingNoFrom>3</BuildingNoFrom>
         <GeospatialInformation>
           <Latitude>22.2971</Latitude>
           <Longitude>114.1682</Longitude>
@@ -21,6 +23,7 @@ void main() {
     expect(hit, isNotNull);
     expect(hit!.lat, closeTo(22.2971, 0.0001));
     expect(hit.lng, closeTo(114.1682, 0.0001));
+    expect(hit.address, contains('廣東道'));
   });
 
   test('ALS outside HK bbox is rejected', () {
