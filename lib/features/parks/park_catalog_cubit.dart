@@ -37,6 +37,10 @@ class ParkCatalogState {
     this.meterOccupancy = const {},
     this.destLat,
     this.destLng,
+    this.tdVacancyFetchedAt,
+    this.tdVacancyError,
+    this.meterOccFetchedAt,
+    this.meterOccError,
   });
 
   final List<Park> parks;
@@ -66,6 +70,24 @@ class ParkCatalogState {
   /// ALS geocode of the search box (destination). Rank nearby parks from here.
   final double? destLat;
   final double? destLng;
+  final DateTime? tdVacancyFetchedAt;
+  final String? tdVacancyError;
+  final DateTime? meterOccFetchedAt;
+  final String? meterOccError;
+
+  String get tdFeedLabel {
+    String fmt(DateTime? t, String? err, String okEmpty) {
+      if (err != null && err.isNotEmpty) return err;
+      if (t == null) return okEmpty;
+      final hh = t.hour.toString().padLeft(2, '0');
+      final mm = t.minute.toString().padLeft(2, '0');
+      return '$hh:$mm 成功';
+    }
+
+    final v = fmt(tdVacancyFetchedAt, tdVacancyError, '空位未拉');
+    final m = fmt(meterOccFetchedAt, meterOccError, '咪錶未拉');
+    return '空位 $v · 咪錶 $m';
+  }
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -112,8 +134,14 @@ class ParkCatalogState {
     Map<String, MeterOccupancy>? meterOccupancy,
     double? destLat,
     double? destLng,
+    DateTime? tdVacancyFetchedAt,
+    String? tdVacancyError,
+    DateTime? meterOccFetchedAt,
+    String? meterOccError,
     bool clearSelected = false,
     bool clearDest = false,
+    bool clearTdVacancyError = false,
+    bool clearMeterOccError = false,
   }) {
     return ParkCatalogState(
       parks: parks ?? this.parks,
@@ -137,6 +165,14 @@ class ParkCatalogState {
       meterOccupancy: meterOccupancy ?? this.meterOccupancy,
       destLat: clearDest ? null : (destLat ?? this.destLat),
       destLng: clearDest ? null : (destLng ?? this.destLng),
+      tdVacancyFetchedAt: tdVacancyFetchedAt ?? this.tdVacancyFetchedAt,
+      tdVacancyError: clearTdVacancyError
+          ? null
+          : (tdVacancyError ?? this.tdVacancyError),
+      meterOccFetchedAt: meterOccFetchedAt ?? this.meterOccFetchedAt,
+      meterOccError: clearMeterOccError
+          ? null
+          : (meterOccError ?? this.meterOccError),
     );
   }
 }
@@ -241,8 +277,18 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       );
       final occ = await _td.fetchMeterOccupancy();
       if (isClosed || seq != _meterSeq) return;
-      emit(state.copyWith(meterSpaces: spaces, meterOccupancy: occ));
-    } catch (_) {}
+      emit(
+        state.copyWith(
+          meterSpaces: spaces,
+          meterOccupancy: occ,
+          meterOccFetchedAt: DateTime.now(),
+          clearMeterOccError: true,
+        ),
+      );
+    } catch (_) {
+      if (isClosed || seq != _meterSeq) return;
+      emit(state.copyWith(meterOccError: '咪錶失敗'));
+    }
   }
 
   Future<void> refreshTdVacancy() async {
@@ -250,9 +296,16 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       final live = await _td.fetchLive();
       if (isClosed) return;
       final mapped = matchTdToParks(parks: _repo.allWithUgc(), live: live);
-      emit(state.copyWith(tdVacancyByParkId: mapped));
+      emit(
+        state.copyWith(
+          tdVacancyByParkId: mapped,
+          tdVacancyFetchedAt: DateTime.now(),
+          clearTdVacancyError: true,
+        ),
+      );
     } catch (_) {
-      // Participating feed is optional — keep catalog.
+      if (isClosed) return;
+      emit(state.copyWith(tdVacancyError: '空位失敗'));
     }
   }
 

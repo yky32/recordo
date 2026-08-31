@@ -48,15 +48,13 @@
 1. 開 https://supabase.com → 登入  
 2. **New project**  
    - Name: `recordo`（任意）  
-   - Region: **Southeast Asia (Singapore)** 較近 HK  
+   - Region: **Northeast Asia (Tokyo)** — live is `ap-northeast-1`. Not Singapore.  
    - Database password: 自己存低（CLI 用）  
 3. 等 project 變綠色 Ready  
 
 ### Step 2 — 跑 SQL（建表）
 1. 左欄 **SQL** → **New query**  
-2. 貼上 repo 入面成份檔內容，**分兩次 Run**：  
-   - 先：`supabase/migrations/20260324000000_recordo_ugc.sql`  
-   - 再：`supabase/migrations/20260825000000_price_note.sql`  
+2. 貼 `supabase/SETUP_ALL.sql`，再按檔名順序跑 `supabase/migrations/` 後加嘅檔。**唔好**只跑 2026-03 UGC + price_note 兩條。  
 3. 成功會見到 Success  
 
 驗證：
@@ -177,7 +175,41 @@ Settings：**雲端 UGC** = 有冇 initialize 成功。
 - Admin dashboard  
 - Realtime subscribe `price_reports`  
 
-**刻意唔放：** vacancy live API、service_role 入 client。OSM 而家 seed 入 `parks`；app bundle 只係後備。
+## 架構（記低）
+
+```
+┌─────────────────────────────────────────────┐
+│  Recordo app                                │
+│  · 本機 catalog snapshot（離線玩）            │
+│  · OSM json = 第一次 / 無網後備               │
+│  · TD 空位 / 咪錶佔用 = 開 app 即時 overlay    │
+│    （唔入 catalog_dump）                      │
+└──────────────────┬──────────────────────────┘
+                   │ anon key + RLS
+                   ▼
+┌─────────────────────────────────────────────┐
+│  Supabase Postgres · ap-northeast-1 Tokyo   │
+│  parks            場庫 + tariff + ev + addr │
+│  catalog_meta     version / park_count       │
+│  catalog_dump()   一次過 jsonb dump           │
+│  meters / meter_spaces   咪錶街 + 格         │
+│  parks_ugc / price_reports / park_prices     │
+│  cohort_events    Phase C telemetry          │
+└─────────────────────────────────────────────┘
+```
+
+**唔入 dump：** TD `hk-td-tis_5` 空位、`occupancystatus.csv` 咪錶佔用。Client `dio` overlay。  
+**唔入 client：** `service_role`。
+
+Live region is **Tokyo** (`ap-northeast-1`) — not Singapore.
+
+### Step 2 — 跑 SQL
+
+Prefer `supabase/SETUP_ALL.sql` once, then later files in `supabase/migrations/` in filename order. Do **not** stop at the 2026-03 UGC + price_note pair.
+
+Now in dump (non-exhaustive): `tariff`, `ev`, `address`, `meters`, `meter_spaces`. Vacancy is **not** a table.
+
+**刻意唔放 client：** `service_role`。Vacancy **is** live — TD open data, not Supabase.
 
 Seed（GHA 喺 `db push` 之後跑）：
 ```bash
