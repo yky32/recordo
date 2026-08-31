@@ -65,6 +65,7 @@ class Park {
     this.priceProvenance = PriceProvenance.unknown,
     this.tariff,
     this.ev,
+    this.address = '',
   });
 
   final String id;
@@ -86,6 +87,9 @@ class Park {
   final PriceProvenance priceProvenance;
   final ParkTariff? tariff;
   final ParkEv? ev;
+
+  /// Full street address. Search + detail. Empty until catalog has it.
+  final String address;
 
   bool get hasPrice =>
       hourlyHkd != null ||
@@ -235,6 +239,7 @@ class Park {
     PriceProvenance? priceProvenance,
     ParkTariff? tariff,
     ParkEv? ev,
+    String? address,
     bool clearPriceVerifiedAt = false,
   }) {
     return Park(
@@ -259,6 +264,7 @@ class Park {
       priceProvenance: priceProvenance ?? this.priceProvenance,
       tariff: tariff ?? this.tariff,
       ev: ev ?? this.ev,
+      address: address ?? this.address,
     );
   }
 
@@ -282,6 +288,7 @@ class Park {
         'priceProvenance': priceProvenanceToJson(priceProvenance),
         if (tariff != null) 'tariff': tariff!.toJson(),
         if (ev != null) 'ev': ev!.toJson(),
+        if (address.isNotEmpty) 'address': address,
       };
 
   factory Park.fromJson(Map<String, dynamic> m) {
@@ -311,6 +318,7 @@ class Park {
       ),
       tariff: ParkTariff.tryParse(m['tariff']),
       ev: ParkEv.tryParse(m['ev']),
+      address: '${m['address'] ?? ''}'.trim(),
     );
   }
 }

@@ -34,6 +34,8 @@ class ParkMap extends StatefulWidget {
     this.selectedMeterId,
     this.onSelectMeter,
     this.onMeterViewport,
+    this.destLat,
+    this.destLng,
   });
 
   final List<Park> parks;
@@ -56,6 +58,8 @@ class ParkMap extends StatefulWidget {
     required double maxLng,
     required double zoom,
   })? onMeterViewport;
+  final double? destLat;
+  final double? destLng;
 
   @override
   State<ParkMap> createState() => ParkMapState();
@@ -102,6 +106,16 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
         if (mounted) centerOnSelected();
       });
     }
+    if (widget.destLat != null &&
+        widget.destLng != null &&
+        (widget.destLat != oldWidget.destLat ||
+            widget.destLng != oldWidget.destLng)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          centerOn(LatLng(widget.destLat!, widget.destLng!), zoom: 16.2);
+        }
+      });
+    }
   }
 
   void centerOnSelected() {
@@ -119,6 +133,10 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       return;
     }
     _animateTo(me, zoom: 16.2);
+  }
+
+  void centerOn(LatLng ll, {double zoom = 16.2}) {
+    _animateTo(ll, zoom: zoom);
   }
 
   Offset _bandOffset(double mapH) {

@@ -166,4 +166,17 @@ void main() {
     expect(again.validations.single.repeat, isTrue);
     expect(again.validations.single.capHours, 5);
   });
+
+  test('park address round-trips and is searchable', () {
+    final p = Park.fromJson({
+      'id': 'osm:way/1444260592',
+      'name': '港威停車場',
+      'district': '尖沙咀',
+      'lat': 22.297,
+      'lng': 114.167,
+      'address': '九龍尖沙咀廣東道 3-27 號 海港城',
+    });
+    expect(p.address, contains('廣東道'));
+    expect(Park.fromJson(p.toJson()).address, p.address);
+  });
 }
