@@ -313,6 +313,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                             zoom: zoom,
                           );
                     },
+                    destLat: catalog.destLat,
+                    destLng: catalog.destLng,
                     onMapInteraction: hideKeyboard,
                     onUserLocation: (ll) => context
                         .read<ParkCatalogCubit>()
@@ -354,7 +356,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                 textInputAction: TextInputAction.search,
                                 onSubmitted: (_) => hideKeyboard(),
                                 decoration: InputDecoration(
-                                  hintText: '搜尋停車場 / 地區',
+                                  hintText: '搜尋目的地 / 停車場',
                                   hintStyle: RType.muted(),
                                   prefixIcon: Icon(
                                     Icons.search_rounded,

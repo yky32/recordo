@@ -96,6 +96,7 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     final lines = <String>[
       'Recordo · ${p.name}',
       if (p.district.isNotEmpty) p.district,
+      if (p.address.isNotEmpty) p.address,
       if (p.hasPrice) p.priceSummary else '未有收費',
       'https://maps.google.com/?q=${p.lat},${p.lng}',
       '',
@@ -273,6 +274,10 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         ].where((s) => s.isNotEmpty).join(' · '),
                         style: RType.muted(),
                       ),
+                      if (p.address.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(p.address, style: RType.muted()),
+                      ],
                       const SizedBox(height: 18),
 
                       // —— Price card (main info block) ——

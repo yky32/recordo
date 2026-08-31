@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:recordo/core/location/user_location.dart';
+import 'package:recordo/features/parks/als_geocode.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
@@ -34,6 +35,8 @@ class ParkCatalogState {
     this.meters = const [],
     this.meterSpaces = const [],
     this.meterOccupancy = const {},
+    this.destLat,
+    this.destLng,
   });
 
   final List<Park> parks;
@@ -59,6 +62,10 @@ class ParkCatalogState {
   final List<MeterStreet> meters;
   final List<MeterSpace> meterSpaces;
   final Map<String, MeterOccupancy> meterOccupancy;
+
+  /// ALS geocode of the search box (destination). Rank nearby parks from here.
+  final double? destLat;
+  final double? destLng;
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -103,7 +110,10 @@ class ParkCatalogState {
     List<MeterStreet>? meters,
     List<MeterSpace>? meterSpaces,
     Map<String, MeterOccupancy>? meterOccupancy,
+    double? destLat,
+    double? destLng,
     bool clearSelected = false,
+    bool clearDest = false,
   }) {
     return ParkCatalogState(
       parks: parks ?? this.parks,
@@ -125,20 +135,28 @@ class ParkCatalogState {
       meters: meters ?? this.meters,
       meterSpaces: meterSpaces ?? this.meterSpaces,
       meterOccupancy: meterOccupancy ?? this.meterOccupancy,
+      destLat: clearDest ? null : (destLat ?? this.destLat),
+      destLng: clearDest ? null : (destLng ?? this.destLng),
     );
   }
 }
 
 class ParkCatalogCubit extends Cubit<ParkCatalogState> {
-  ParkCatalogCubit({ParkRepository? repo, TdParkingClient? td})
-      : _repo = repo ?? ParkRepository(),
+  ParkCatalogCubit({
+    ParkRepository? repo,
+    TdParkingClient? td,
+    AlsGeocodeClient? als,
+  })  : _repo = repo ?? ParkRepository(),
         _td = td ?? TdParkingClient(),
+        _als = als ?? AlsGeocodeClient(),
         super(const ParkCatalogState());
 
   final ParkRepository _repo;
   final TdParkingClient _td;
+  final AlsGeocodeClient _als;
   Timer? _pinRank;
   Timer? _meterBbox;
+  Timer? _searchGeo;
   int _meterSeq = 0;
 
   void _emitCatalog({bool loading = false}) {
@@ -247,15 +265,50 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   }
 
   void setQuery(String q) {
-    final piped = _pipeline(_repo.allWithUgc(), query: q);
+    _searchGeo?.cancel();
+    final piped = _pipeline(
+      _repo.allWithUgc(),
+      query: q,
+      ignoreDest: true,
+    );
     emit(
       state.copyWith(
         query: q,
         parks: piped.featured,
         restParks: piped.rest,
         showRestParks: q.trim().isNotEmpty,
+        clearDest: true,
       ),
     );
+    if (q.trim().length < 2) return;
+    _searchGeo = Timer(const Duration(milliseconds: 420), () {
+      unawaited(_geocodeSearch(q));
+    });
+  }
+
+  Future<void> _geocodeSearch(String q) async {
+    if (isClosed) return;
+    if (state.query.trim() != q.trim()) return;
+    try {
+      final hit = await _als.lookup(q);
+      if (isClosed || hit == null) return;
+      if (state.query.trim() != q.trim()) return;
+      final piped = _pipeline(
+        _repo.allWithUgc(),
+        query: q,
+        destLat: hit.lat,
+        destLng: hit.lng,
+      );
+      emit(
+        state.copyWith(
+          destLat: hit.lat,
+          destLng: hit.lng,
+          parks: piped.featured,
+          restParks: piped.rest,
+          showRestParks: true,
+        ),
+      );
+    } catch (_) {}
   }
 
   void setUserLocation(double lat, double lng) {
@@ -299,21 +352,28 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     double? pinLat,
     double? pinLng,
     String? query,
+    double? destLat,
+    double? destLng,
+    bool ignoreDest = false,
   }) {
     final q = (query ?? state.query).trim().toLowerCase();
+    final dLat = ignoreDest ? null : (destLat ?? state.destLat);
+    final dLng = ignoreDest ? null : (destLng ?? state.destLng);
     var list = raw;
-    if (q.isNotEmpty) {
+    // Name/address filter only until ALS dest exists — dest search = nearest lots.
+    if (q.isNotEmpty && dLat == null) {
       list = list
           .where(
             (p) =>
                 p.name.toLowerCase().contains(q) ||
-                p.district.toLowerCase().contains(q),
+                p.district.toLowerCase().contains(q) ||
+                p.address.toLowerCase().contains(q),
           )
           .toList();
     }
 
-    final cLat = pinLat ?? state.pinLat ?? state.userLat;
-    final cLng = pinLng ?? state.pinLng ?? state.userLng;
+    final cLat = dLat ?? pinLat ?? state.pinLat ?? state.userLat;
+    final cLng = dLng ?? pinLng ?? state.pinLng ?? state.userLng;
 
     final sorted = sortParksForDisplay(
       list,
@@ -322,6 +382,19 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     );
 
     if (q.isNotEmpty) {
+      if (dLat != null) {
+        bool match(Park p) =>
+            p.name.toLowerCase().contains(q) ||
+            p.district.toLowerCase().contains(q) ||
+            p.address.toLowerCase().contains(q);
+        final hits = sorted.where(match).toList();
+        final seen = <String>{};
+        final featured = <Park>[];
+        for (final p in [...hits, ...sorted.take(40)]) {
+          if (seen.add(p.id)) featured.add(p);
+        }
+        return (featured: featured, rest: const []);
+      }
       return (featured: sorted, rest: const []);
     }
 
@@ -352,8 +425,8 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   }
 
   double? distanceMeters(Park p) {
-    final cLat = state.pinLat ?? state.userLat;
-    final cLng = state.pinLng ?? state.userLng;
+    final cLat = state.destLat ?? state.pinLat ?? state.userLat;
+    final cLng = state.destLng ?? state.pinLng ?? state.userLng;
     if (cLat == null || cLng == null) return null;
     return Geolocator.distanceBetween(cLat, cLng, p.lat, p.lng);
   }
@@ -497,6 +570,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
   Future<void> close() {
     _pinRank?.cancel();
     _meterBbox?.cancel();
+    _searchGeo?.cancel();
     return super.close();
   }
 }
