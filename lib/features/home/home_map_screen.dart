@@ -529,12 +529,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                     16,
                                     0,
                                     16,
-                                    (active != null || selected != null)
-                                        ? (active == null
-                                                ? 120.0
-                                                : 80.0) +
-                                            bottomInset
-                                        : 12.0 + bottomInset,
+                                    keyboardOpen
+                                        ? 12.0 + kb
+                                        : ((active != null ||
+                                                    selected != null)
+                                                ? (active == null
+                                                    ? 120.0
+                                                    : 80.0)
+                                                : 12.0) +
+                                            bottomInset,
                                   ),
                                   physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics(),
@@ -616,7 +619,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                     );
                                   },
                                 ),
-                                if (active != null || selected != null)
+                                if (!keyboardOpen &&
+                                    (active != null || selected != null))
                                   Positioned(
                                     left: 0,
                                     right: 0,
@@ -717,25 +721,14 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     builder: (context, child) {
                       return Align(
                         alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: EdgeInsets.only(bottom: kb),
-                          child: SizedBox(
-                            height: screenH * _sheetExtent.value,
-                            width: double.infinity,
-                            child: child,
-                          ),
+                        child: SizedBox(
+                          height: screenH * _sheetExtent.value + kb,
+                          width: double.infinity,
+                          child: child,
                         ),
                       );
                     },
                   ),
-                  if (keyboardOpen)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: kb + 2,
-                      child: ColoredBox(color: UberColors.sheet),
-                    ),
                 ],
               );
             },
