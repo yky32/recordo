@@ -131,6 +131,20 @@ class Park {
 
   String get currency => tariff?.currency ?? 'HKD';
 
+  /// Amount only — list uses this; tick / ? carry trust, not the words.
+  String get priceAmountLabel {
+    if (hourlyHkd != null) {
+      return '約 ${moneyLabel(hourlyHkd!, currency)}/時';
+    }
+    if (dailyHkd != null) {
+      return '約 ${moneyLabel(dailyHkd!, currency)}/日';
+    }
+    if (nightHkd != null) {
+      return '夜泊約 ${moneyLabel(nightHkd!, currency)}';
+    }
+    return '未有收費';
+  }
+
   /// List / hero line — median-style display with report count when known.
   String get priceSummary {
     if (hourlyHkd != null) {
