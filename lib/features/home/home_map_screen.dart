@@ -249,9 +249,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final screenH = MediaQuery.sizeOf(context).height;
+    final kb = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = kb > 8;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      // ClipVal: sheet owns the keyboard. Don't shrink the map.
+      resizeToAvoidBottomInset: false,
       body: BlocBuilder<ParkCatalogCubit, ParkCatalogState>(
         builder: (context, catalog) {
           return BlocBuilder<SessionCubit, SessionState>(
@@ -451,7 +454,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     builder: (context, extent, _) {
                       return Positioned(
                         right: 16,
-                        bottom: screenH * extent + 12,
+                        bottom: screenH * extent + 12 + kb,
                         child: Material(
                           color: ThemeController.instance.isDark
                               ? const Color(0xFF1C1C1E)
@@ -526,12 +529,15 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                     16,
                                     0,
                                     16,
-                                    (active != null || selected != null)
-                                        ? (active == null
-                                                ? 120.0
-                                                : 80.0) +
-                                            bottomInset
-                                        : 12.0 + bottomInset,
+                                    keyboardOpen
+                                        ? 12.0 + kb
+                                        : ((active != null ||
+                                                    selected != null)
+                                                ? (active == null
+                                                    ? 120.0
+                                                    : 80.0)
+                                                : 12.0) +
+                                            bottomInset,
                                   ),
                                   physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics(),
@@ -613,7 +619,8 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                     );
                                   },
                                 ),
-                                if (active != null || selected != null)
+                                if (!keyboardOpen &&
+                                    (active != null || selected != null))
                                   Positioned(
                                     left: 0,
                                     right: 0,
@@ -715,7 +722,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                       return Align(
                         alignment: Alignment.bottomCenter,
                         child: SizedBox(
-                          height: screenH * _sheetExtent.value,
+                          height: screenH * _sheetExtent.value + kb,
                           width: double.infinity,
                           child: child,
                         ),
