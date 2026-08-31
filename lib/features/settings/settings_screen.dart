@@ -335,6 +335,23 @@ class _SettingsBody extends StatelessWidget {
                 ),
               ),
               _NavRow(
+                icon: Icons.local_parking_outlined,
+                title: '運輸署資料',
+                subtitle: cat.tdFeedLabel,
+                onTap: () async {
+                  HapticFeedback.selectionClick();
+                  await context.read<ParkCatalogCubit>().refreshTdVacancy();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        context.read<ParkCatalogCubit>().state.tdFeedLabel,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _NavRow(
                 icon: Icons.sync_rounded,
                 title: '檢查場庫更新',
                 subtitle: syncSubtitle,

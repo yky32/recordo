@@ -343,12 +343,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Material(
-                              color: UberColors.sheet.withValues(alpha: 0.94),
-                              elevation: 6,
-                              shadowColor: Colors.black54,
-                              borderRadius: BorderRadius.circular(16),
-                              child: TextField(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Material(
+                                  color: UberColors.sheet
+                                      .withValues(alpha: 0.94),
+                                  elevation: 6,
+                                  shadowColor: Colors.black54,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: TextField(
                                 controller: _searchCtrl,
                                 onChanged: (v) => context
                                     .read<ParkCatalogCubit>()
@@ -388,8 +392,23 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
+                            if (catalog.destLabel.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '用：${catalog.destLabel}',
+                                    style: RType.muted(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                           _RoundIcon(
                             icon: Icons.receipt_long_rounded,
                             onTap: () {

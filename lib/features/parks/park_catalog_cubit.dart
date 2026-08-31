@@ -38,6 +38,11 @@ class ParkCatalogState {
     this.meterOccupancy = const {},
     this.destLat,
     this.destLng,
+    this.destLabel = '',
+    this.tdVacancyFetchedAt,
+    this.tdVacancyPaused = false,
+    this.meterOccFetchedAt,
+    this.meterOccPaused = false,
   });
 
   final List<Park> parks;
@@ -67,6 +72,23 @@ class ParkCatalogState {
   /// ALS geocode of the search box (destination). Rank nearby parks from here.
   final double? destLat;
   final double? destLng;
+  final String destLabel;
+  final DateTime? tdVacancyFetchedAt;
+  final bool tdVacancyPaused;
+  final DateTime? meterOccFetchedAt;
+  final bool meterOccPaused;
+
+  String get tdFeedLabel {
+    String one(String name, DateTime? t, bool paused) {
+      if (paused) return '$name暫停';
+      if (t == null) return '$name未拉';
+      final hh = t.hour.toString().padLeft(2, '0');
+      final mm = t.minute.toString().padLeft(2, '0');
+      return '$name$hh:$mm';
+    }
+
+    return '運輸署 · 上次成功 ${one('空位 ', tdVacancyFetchedAt, tdVacancyPaused)} · ${one('咪錶 ', meterOccFetchedAt, meterOccPaused)}';
+  }
 
   bool get isSearching => query.trim().isNotEmpty;
 
@@ -76,7 +98,10 @@ class ParkCatalogState {
   bool communityPaidLoadingFor(String parkId) =>
       communityPaidLoading.contains(parkId);
 
-  TdHourlyVacancy? tdVacancyFor(String parkId) => tdVacancyByParkId[parkId];
+  TdHourlyVacancy? tdVacancyFor(String parkId) {
+    if (tdVacancyPaused) return null;
+    return tdVacancyByParkId[parkId];
+  }
 
   /// Featured + collapsed remainder — for map pins in the current window.
   List<Park> get allWindowParks => [...parks, ...restParks];
@@ -113,6 +138,11 @@ class ParkCatalogState {
     Map<String, MeterOccupancy>? meterOccupancy,
     double? destLat,
     double? destLng,
+    String? destLabel,
+    DateTime? tdVacancyFetchedAt,
+    bool? tdVacancyPaused,
+    DateTime? meterOccFetchedAt,
+    bool? meterOccPaused,
     bool clearSelected = false,
     bool clearDest = false,
   }) {
@@ -138,6 +168,11 @@ class ParkCatalogState {
       meterOccupancy: meterOccupancy ?? this.meterOccupancy,
       destLat: clearDest ? null : (destLat ?? this.destLat),
       destLng: clearDest ? null : (destLng ?? this.destLng),
+      destLabel: clearDest ? '' : (destLabel ?? this.destLabel),
+      tdVacancyFetchedAt: tdVacancyFetchedAt ?? this.tdVacancyFetchedAt,
+      tdVacancyPaused: tdVacancyPaused ?? this.tdVacancyPaused,
+      meterOccFetchedAt: meterOccFetchedAt ?? this.meterOccFetchedAt,
+      meterOccPaused: meterOccPaused ?? this.meterOccPaused,
     );
   }
 }
@@ -242,13 +277,29 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       );
       if (isClosed || seq != _meterSeq) return;
       var occ = _td.occupancyCache;
-      emit(state.copyWith(meterSpaces: spaces, meterOccupancy: occ));
+      emit(
+        state.copyWith(
+          meterSpaces: spaces,
+          meterOccupancy: occ,
+          meterOccFetchedAt: occ.isEmpty ? null : DateTime.now(),
+          meterOccPaused: false,
+        ),
+      );
       if (!_td.occupancyFresh()) {
         occ = await _td.fetchMeterOccupancy();
         if (isClosed || seq != _meterSeq) return;
-        emit(state.copyWith(meterOccupancy: occ));
+        emit(
+          state.copyWith(
+            meterOccupancy: occ,
+            meterOccFetchedAt: DateTime.now(),
+            meterOccPaused: false,
+          ),
+        );
       }
-    } catch (_) {}
+    } catch (_) {
+      if (isClosed || seq != _meterSeq) return;
+      emit(state.copyWith(meterOccPaused: true));
+    }
   }
 
   Future<void> refreshTdVacancy() async {
@@ -256,16 +307,20 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
       final live = await _td.fetchLive();
       if (isClosed) return;
       final parks = _repo.allWithUgc();
+      final windowIds = {
+        for (final p in state.allWindowParks) p.id,
+      };
       final payload = <String, dynamic>{
         'parks': [
           for (final p in parks)
-            {
-              'id': p.id,
-              'name': p.name,
-              'lat': p.lat,
-              'lng': p.lng,
-              'tdParkId': p.tdParkId,
-            },
+            if (windowIds.contains(p.id) || p.tdParkId.isNotEmpty)
+              {
+                'id': p.id,
+                'name': p.name,
+                'lat': p.lat,
+                'lng': p.lng,
+                'tdParkId': p.tdParkId,
+              },
         ],
         'live': [for (final t in live) t.toJson()],
       };
@@ -277,9 +332,21 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
             Map<String, dynamic>.from(e.value as Map),
           ),
       };
-      emit(state.copyWith(tdVacancyByParkId: mapped));
+      emit(
+        state.copyWith(
+          tdVacancyByParkId: mapped,
+          tdVacancyFetchedAt: DateTime.now(),
+          tdVacancyPaused: false,
+        ),
+      );
     } catch (_) {
-      // Participating feed is optional — keep catalog.
+      if (isClosed) return;
+      emit(
+        state.copyWith(
+          tdVacancyPaused: true,
+          tdVacancyByParkId: const {},
+        ),
+      );
     }
   }
 
@@ -330,6 +397,7 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
         state.copyWith(
           destLat: hit.lat,
           destLng: hit.lng,
+          destLabel: hit.address,
           parks: piped.featured,
           restParks: piped.rest,
           showRestParks: true,
