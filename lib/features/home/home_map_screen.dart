@@ -1028,14 +1028,20 @@ class _ParkTile extends StatelessWidget {
                       [
                         if (distance.isNotEmpty) distance,
                         park.district,
-                        park.priceSummary,
+                        park.priceAmountLabel,
                         ?vacancy,
-                        if (selected) park.freshnessLabel,
                       ].where((s) => s.isNotEmpty).join(' · '),
                       style: RType.muted(),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (selected && park.freshnessLabel.isNotEmpty)
+                      Text(
+                        park.freshnessLabel,
+                        style: RType.muted(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                   ],
                 ),
               ),
@@ -1068,10 +1074,10 @@ class _PriceTrustIcon extends StatelessWidget {
     final Color color;
     if (park.isOperatorOfficial) {
       icon = Icons.verified_rounded;
-      color = UberColors.accent;
+      color = const Color(0xFF4C9EFF);
     } else if (park.isVerifiedPrice) {
       icon = Icons.fact_check_rounded;
-      color = UberColors.accent;
+      color = const Color(0xFF4C9EFF);
     } else if (park.isSeedDemoPrice || park.hasPrice) {
       icon = Icons.help_outline_rounded;
       color = UberColors.muted;
