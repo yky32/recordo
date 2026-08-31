@@ -239,9 +239,14 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
         maxLat: maxLat,
         maxLng: maxLng,
       );
-      final occ = await _td.fetchMeterOccupancy();
       if (isClosed || seq != _meterSeq) return;
+      var occ = _td.occupancyCache;
       emit(state.copyWith(meterSpaces: spaces, meterOccupancy: occ));
+      if (!_td.occupancyFresh()) {
+        occ = await _td.fetchMeterOccupancy();
+        if (isClosed || seq != _meterSeq) return;
+        emit(state.copyWith(meterOccupancy: occ));
+      }
     } catch (_) {}
   }
 

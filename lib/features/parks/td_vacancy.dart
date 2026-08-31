@@ -130,26 +130,84 @@ List<TdHourlyVacancy> joinTdLive({
   ];
 }
 
-/// Snap TD lots onto catalog parks within [maxMeters]. Participating only.
+/// Snap TD lots onto catalog parks.
+/// 1) [Park.tdParkId] official join  2) distinctive name  3) ≤80m geo (grid).
+/// Each TD lot claimed once. Never persist geo guesses from the client.
 Map<String, TdHourlyVacancy> matchTdToParks({
   required List<Park> parks,
   required List<TdHourlyVacancy> live,
   double maxMeters = 80,
 }) {
+  final liveById = <String, TdHourlyVacancy>{
+    for (final t in live) t.parkId: t,
+  };
   final claimed = <String>{};
   final out = <String, TdHourlyVacancy>{};
+
   for (final p in parks) {
+    if (p.tdParkId.isEmpty) continue;
+    final t = liveById[p.tdParkId];
+    if (t == null || claimed.contains(t.parkId)) continue;
+    claimed.add(t.parkId);
+    out[p.id] = t;
+  }
+
+  final leftoverP = parks.where((p) => !out.containsKey(p.id)).toList();
+  final leftoverT = live.where((t) => !claimed.contains(t.parkId)).toList();
+
+  String norm(String s) => s
+      .replaceAll('停車場', '')
+      .replaceAll('泊車轉乘', '')
+      .replaceAll(' ', '')
+      .replaceAll('　', '')
+      .trim();
+
+  final byName = <String, TdHourlyVacancy>{};
+  for (final t in leftoverT) {
+    final n = norm(t.nameTc);
+    if (n.length < 4) continue;
+    if (byName.containsKey(n)) {
+      byName.remove(n); // ambiguous
+    } else {
+      byName[n] = t;
+    }
+  }
+  for (final p in leftoverP) {
+    final n = norm(p.name);
+    if (n.length < 4) continue;
+    final t = byName[n];
+    if (t == null || claimed.contains(t.parkId)) continue;
+    claimed.add(t.parkId);
+    out[p.id] = t;
+  }
+
+  const cell = 0.0012;
+  String key(double lat, double lng) =>
+      '${(lat / cell).round()},${(lng / cell).round()}';
+  final grid = <String, List<TdHourlyVacancy>>{};
+  for (final t in live) {
+    if (claimed.contains(t.parkId)) continue;
+    (grid[key(t.lat, t.lng)] ??= []).add(t);
+  }
+
+  for (final p in parks) {
+    if (out.containsKey(p.id)) continue;
     TdHourlyVacancy? best;
     var bestD = maxMeters;
-    for (final t in live) {
-      if (claimed.contains(t.parkId)) continue;
-      if ((p.lat - t.lat).abs() > 0.0012 || (p.lng - t.lng).abs() > 0.0012) {
-        continue;
-      }
-      final d = Geolocator.distanceBetween(p.lat, p.lng, t.lat, t.lng);
-      if (d <= bestD) {
-        bestD = d;
-        best = t;
+    final ci = (p.lat / cell).round();
+    final cj = (p.lng / cell).round();
+    for (var di = -1; di <= 1; di++) {
+      for (var dj = -1; dj <= 1; dj++) {
+        final bucket = grid['${ci + di},${cj + dj}'];
+        if (bucket == null) continue;
+        for (final t in bucket) {
+          if (claimed.contains(t.parkId)) continue;
+          final d = Geolocator.distanceBetween(p.lat, p.lng, t.lat, t.lng);
+          if (d <= bestD) {
+            bestD = d;
+            best = t;
+          }
+        }
       }
     }
     if (best != null) {

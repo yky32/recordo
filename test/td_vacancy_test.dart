@@ -71,4 +71,34 @@ void main() {
     expect(mapped['kam']?.vacancy, 4);
     expect(mapped.length, 1);
   });
+
+  test('tdParkId wins over a nearer geo neighbour', () {
+    final park = Park(
+      id: 'plus',
+      name: 'YOHO PLUS',
+      district: '元朗',
+      lat: 22.445,
+      lng: 114.035,
+      tdParkId: 'td-plus',
+    );
+    final live = [
+      const TdHourlyVacancy(
+        parkId: 'td-plus',
+        nameTc: 'PLUS',
+        lat: 22.45,
+        lng: 114.04,
+        vacancy: 9,
+      ),
+      const TdHourlyVacancy(
+        parkId: 'td-mall',
+        nameTc: '形點 II',
+        lat: 22.4451,
+        lng: 114.0351,
+        vacancy: 0,
+      ),
+    ];
+    final mapped = matchTdToParks(parks: [park], live: live);
+    expect(mapped['plus']?.parkId, 'td-plus');
+    expect(mapped['plus']?.vacancy, 9);
+  });
 }
