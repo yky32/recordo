@@ -388,20 +388,29 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     if (z < 16) return const [];
     final groups = <String, List<MeterSpace>>{};
     for (final m in widget.meterSpaces) {
-      final k =
-          '${m.lat.toStringAsFixed(5)},${m.lng.toStringAsFixed(5)}';
+      final k = '${m.lat.toStringAsFixed(5)},${m.lng.toStringAsFixed(5)}';
       (groups[k] ??= []).add(m);
     }
     final out = <Marker>[];
     for (final g in groups.values) {
-      for (var i = 0; i < g.length; i++) {
+      final n = g.length;
+      final origin = g.first;
+      final cosLat = math.cos(origin.lat * math.pi / 180).clamp(0.25, 1.0);
+      final mPerPx = 156543.03392 * cosLat / math.pow(2, z);
+      // z16 + 0.00004° was ~2px — CEO candy stack. Spread in *screen* px.
+      final radiusPx = n <= 1
+          ? 0.0
+          : math.min(56.0, math.max(22.0, (n * 18) / (2 * math.pi)));
+      final rLat = (mPerPx * radiusPx) / 111320.0;
+      final rLng = rLat / cosLat;
+      for (var i = 0; i < n; i++) {
         final m = g[i];
         var lat = m.lat;
         var lng = m.lng;
-        if (g.length > 1) {
-          final a = (2 * math.pi * i) / g.length;
-          lat += 0.00004 * math.sin(a);
-          lng += 0.00004 * math.cos(a);
+        if (n > 1) {
+          final a = (2 * math.pi * i) / n;
+          lat += rLat * math.sin(a);
+          lng += rLng * math.cos(a);
         }
         out.add(
           Marker(
