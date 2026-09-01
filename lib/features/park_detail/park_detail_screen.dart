@@ -135,11 +135,19 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                       ('price', '價錢唔實'),
                       ('other', '其他'),
                     ])
-                      RadioListTile<String>(
+                      ListTile(
                         dense: true,
-                        value: e.$1,
-                        groupValue: kind,
-                        onChanged: (v) => setLocal(() => kind = v ?? kind),
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => setLocal(() => kind = e.$1),
+                        leading: Icon(
+                          kind == e.$1
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          size: 20,
+                          color: kind == e.$1
+                              ? UberColors.accent
+                              : UberColors.muted,
+                        ),
                         title: Text(e.$2, style: RType.body()),
                       ),
                     const SizedBox(height: 8),
