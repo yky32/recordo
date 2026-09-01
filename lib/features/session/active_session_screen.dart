@@ -52,6 +52,41 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     }
   }
 
+  Future<void> _discard() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: UberColors.sheet,
+        title: Text('取消今次計時？', style: RType.titleSm()),
+        content: Text(
+          '當誤撳開始。唔會記入過往記錄。',
+          style: RType.body(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('繼續計時', style: RType.body()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              '取消計時',
+              style: RType.body().copyWith(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await context.read<SessionCubit>().discardActive();
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
+
   Future<void> _editStart(DateTime current) async {
     final picked = await showModalBottomSheet<DateTime>(
       context: context,
@@ -179,7 +214,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         style: RType.titleSm(),
                       ),
                     ),
-                    const SizedBox(width: 48),
+                    TextButton(
+                      onPressed: _discard,
+                      child: Text('取消', style: RType.muted()),
+                    ),
                   ],
                 ),
               ),
