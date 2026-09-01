@@ -497,8 +497,8 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
         }
         final marker = Marker(
           point: pt,
-          width: 18,
-          height: 18,
+          width: 44,
+          height: 44,
           alignment: Alignment.center,
           child: MeterBayDot(
             status: st,

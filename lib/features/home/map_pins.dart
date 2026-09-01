@@ -349,23 +349,30 @@ class MeterBayDot extends StatelessWidget {
         ? 16.0
         : occupied
             ? 7.0
-            : 11.0;
+            : 12.0;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Opacity(
-        opacity: occupied ? 0.4 : 1,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: occupied
-                ? null
-                : Border.all(
-                    color: Colors.white,
-                    width: selected ? 2 : 1.2,
-                  ),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(
+          child: Opacity(
+            opacity: occupied ? 0.4 : 1,
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: occupied
+                    ? null
+                    : Border.all(
+                        color: Colors.white,
+                        width: selected ? 2 : 1.2,
+                      ),
+              ),
+            ),
           ),
         ),
       ),
