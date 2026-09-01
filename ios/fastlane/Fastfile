@@ -43,6 +43,13 @@ def flutter_git_define_args
   else
     UI.important("☁️  No SUPABASE_URL/ANON_KEY — TF build is local-UGC only")
   end
+  mb = ENV["MAPBOX_PK"].to_s.strip
+  if mb.start_with?("pk.")
+    UI.message("🗺️  Embedding Mapbox dart-define for TF")
+    parts << "--dart-define=MAPBOX_PK=#{mb}"
+  else
+    UI.important("🗺️  No MAPBOX_PK — dark map stays Esri z16")
+  end
   parts.join(" ")
 end
 
