@@ -408,7 +408,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     if (z < 16) return const [];
     if (widget.meterSpaces.isEmpty) return const [];
 
-    final showOccupied = z >= 17;
+    // Occupied is 90% of the candy (CEO 軒尼詩). Map = vacant only, like HKeMeter far zoom.
     final poles = <String, List<MeterSpace>>{};
     for (final m in widget.meterSpaces) {
       final pole = (m.poleId ?? '').trim();
@@ -447,7 +447,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     final groups = <String, List<List<MeterSpace>>>{};
     for (final bays in poles.values) {
       final st = statusOf(bays);
-      if (!showOccupied && st == MeterBayStatus.occupied) continue;
+      if (st != MeterBayStatus.vacant) continue;
       var lat = 0.0, lng = 0.0;
       for (final m in bays) {
         lat += m.lat;
