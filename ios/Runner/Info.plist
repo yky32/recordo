@@ -68,6 +68,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Recordo uses your location to find nearby car parks. 用嚟搵附近停車場。</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Recordo uses your location to find nearby car parks while you use the app. We do not track you in the background. 用嚟搵附近停車場，唔會喺背景追蹤。</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Remind you when parking time is up, and to log the fee. 泊車計時同記收費提醒。</string>
 	<key>NSSupportsLiveActivities</key>
