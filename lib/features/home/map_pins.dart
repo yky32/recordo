@@ -344,17 +344,28 @@ class MeterBayDot extends StatelessWidget {
       MeterBayStatus.occupied => const Color(0xFFE24B4A),
       MeterBayStatus.suspended => const Color(0xFF8A8A8A),
     };
+    final occupied = status == MeterBayStatus.occupied && !selected;
+    final size = selected
+        ? 16.0
+        : occupied
+            ? 7.0
+            : 11.0;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: selected ? 16 : 12,
-        height: selected ? 16 : 12,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white,
-            width: selected ? 2 : 1.2,
+      child: Opacity(
+        opacity: occupied ? 0.4 : 1,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: occupied
+                ? null
+                : Border.all(
+                    color: Colors.white,
+                    width: selected ? 2 : 1.2,
+                  ),
           ),
         ),
       ),

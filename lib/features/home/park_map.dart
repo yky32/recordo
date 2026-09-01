@@ -408,32 +408,78 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     if (z < 16) return const [];
     if (widget.meterSpaces.isEmpty) return const [];
 
+    final showOccupied = z >= 17;
+    final poles = <String, List<MeterSpace>>{};
+    for (final m in widget.meterSpaces) {
+      final pole = (m.poleId ?? '').trim();
+      final k = pole.isEmpty ? m.id : pole;
+      (poles[k] ??= []).add(m);
+    }
+
+    MeterBayStatus statusOf(List<MeterSpace> bays) {
+      var vacant = false;
+      var occupied = false;
+      for (final m in bays) {
+        final s = widget.meterOccupancy[m.id]?.status ??
+            MeterBayStatus.suspended;
+        if (s == MeterBayStatus.vacant) vacant = true;
+        if (s == MeterBayStatus.occupied) occupied = true;
+      }
+      if (vacant) return MeterBayStatus.vacant;
+      if (occupied) return MeterBayStatus.occupied;
+      return MeterBayStatus.suspended;
+    }
+
+    MeterSpace tapBay(List<MeterSpace> bays) {
+      for (final m in bays) {
+        if (widget.meterOccupancy[m.id]?.status == MeterBayStatus.vacant) {
+          return m;
+        }
+      }
+      return bays.first;
+    }
+
     final lat0 = widget.meterSpaces.first.lat;
     final cosLat = math.cos(lat0 * math.pi / 180).clamp(0.25, 1.0);
     final mPerPx = 156543.03392 * cosLat / math.pow(2, z);
-    // Group anything that would overlap on screen (~18px), not only identical 5dp.
     final cellLat = (mPerPx * 18) / 111320.0;
     final cellLng = cellLat / cosLat;
-    final groups = <String, List<MeterSpace>>{};
-    for (final m in widget.meterSpaces) {
-      final k =
-          '${(m.lat / cellLat).round()},${(m.lng / cellLng).round()}';
-      (groups[k] ??= []).add(m);
+    final groups = <String, List<List<MeterSpace>>>{};
+    for (final bays in poles.values) {
+      final st = statusOf(bays);
+      if (!showOccupied && st == MeterBayStatus.occupied) continue;
+      var lat = 0.0, lng = 0.0;
+      for (final m in bays) {
+        lat += m.lat;
+        lng += m.lng;
+      }
+      lat /= bays.length;
+      lng /= bays.length;
+      final k = '${(lat / cellLat).round()},${(lng / cellLng).round()}';
+      (groups[k] ??= []).add(bays);
     }
 
-    final out = <Marker>[];
+    final vacant = <Marker>[];
+    final rest = <Marker>[];
     for (final g in groups.values) {
       final n = g.length;
       final origin = g.first;
+      var oLat = 0.0, oLng = 0.0;
+      for (final b in origin) {
+        oLat += b.lat;
+        oLng += b.lng;
+      }
+      oLat /= origin.length;
+      oLng /= origin.length;
       final radiusPx = n <= 1
           ? 0.0
           : math.min(64.0, math.max(28.0, (n * 20) / (2 * math.pi)));
       final rLat = (mPerPx * radiusPx) / 111320.0;
       final rLng = rLat / cosLat;
       for (var i = 0; i < n; i++) {
-        final m = g[i];
-        var lat = origin.lat;
-        var lng = origin.lng;
+        final bays = g[i];
+        var lat = oLat;
+        var lng = oLng;
         if (n > 1) {
           final ring = i ~/ 12;
           final idx = i % 12;
@@ -443,27 +489,33 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
           lat += rLat * scale * math.sin(a);
           lng += rLng * scale * math.cos(a);
         }
+        final m = tapBay(bays);
+        final st = statusOf(bays);
         final pt = LatLng(lat, lng);
-        _meterShownAt[m.id] = pt;
-        out.add(
-          Marker(
-            point: pt,
-            width: 18,
-            height: 18,
-            alignment: Alignment.center,
-            child: MeterBayDot(
-              status: widget.meterOccupancy[m.id]?.status ??
-                  MeterBayStatus.suspended,
-              selected: m.id == widget.selectedMeterId,
-              onTap: () => widget.onSelectMeter?.call(
-                m.id == widget.selectedMeterId ? '' : m.id,
-              ),
+        for (final b in bays) {
+          _meterShownAt[b.id] = pt;
+        }
+        final marker = Marker(
+          point: pt,
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          child: MeterBayDot(
+            status: st,
+            selected: bays.any((b) => b.id == widget.selectedMeterId),
+            onTap: () => widget.onSelectMeter?.call(
+              m.id == widget.selectedMeterId ? '' : m.id,
             ),
           ),
         );
+        if (st == MeterBayStatus.vacant) {
+          vacant.add(marker);
+        } else {
+          rest.add(marker);
+        }
       }
     }
-    return out;
+    return [...rest, ...vacant];
   }
 
   Marker? _meterCallout() {
