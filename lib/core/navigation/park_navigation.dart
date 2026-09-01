@@ -10,7 +10,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Open system / Google / Apple Maps navigation to a park.
 abstract final class ParkNavigation {
-  static Future<void> showChooser(BuildContext context, Park park) async {
+  static Future<void> showChooser(BuildContext context, Park park) {
+    return showChooserAt(
+      context,
+      lat: park.lat,
+      lng: park.lng,
+      name: park.name,
+    );
+  }
+
+  static Future<void> showChooserAt(
+    BuildContext context, {
+    required double lat,
+    required double lng,
+    required String name,
+  }) async {
     HapticFeedback.selectionClick();
     await showModalBottomSheet<void>(
       context: context,
@@ -34,27 +48,32 @@ abstract final class ParkNavigation {
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
-                Text('導航去「${park.name}」', style: RType.titleSm()),
+                Text('導航去「$name」', style: RType.titleSm()),
                 const SizedBox(height: 8),
                 if (!kIsWeb && Platform.isIOS)
                   _tile(
                     ctx,
                     icon: Icons.map_outlined,
                     label: 'Apple 地圖',
-                    onTap: () => _open(ctx, appleMaps(park)),
+                    onTap: () => _open(ctx, appleMapsLatLng(lat, lng, name)),
                   ),
                 _tile(
                   ctx,
                   icon: Icons.navigation_outlined,
                   label: 'Google 地圖',
-                  onTap: () => _open(ctx, googleMaps(park)),
+                  onTap: () => _open(ctx, googleMapsLatLng(lat, lng)),
                 ),
                 if (!kIsWeb && Platform.isAndroid)
                   _tile(
                     ctx,
                     icon: Icons.directions_car_outlined,
                     label: '系統導航',
-                    onTap: () => _open(ctx, geoUri(park)),
+                    onTap: () => _open(
+                      ctx,
+                      Uri.parse(
+                        'geo:$lat,$lng?q=$lat,$lng(${Uri.encodeComponent(name)})',
+                      ),
+                    ),
                   ),
                 _tile(
                   ctx,
@@ -62,7 +81,7 @@ abstract final class ParkNavigation {
                   label: '複製座標',
                   onTap: () async {
                     final s =
-                        '${park.lat.toStringAsFixed(6)}, ${park.lng.toStringAsFixed(6)}';
+                        '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
                     await Clipboard.setData(ClipboardData(text: s));
                     if (ctx.mounted) Navigator.pop(ctx);
                     if (context.mounted) {
