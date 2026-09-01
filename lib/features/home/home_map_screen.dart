@@ -440,16 +440,6 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                               color: Color(0xFF2FA86B),
                               label: '空置',
                             ),
-                            SizedBox(width: 8),
-                            _MeterLegendDot(
-                              color: Color(0xFFE24B4A),
-                              label: '已使用',
-                            ),
-                            SizedBox(width: 8),
-                            _MeterLegendDot(
-                              color: Color(0xFF8A8A8A),
-                              label: '暫停',
-                            ),
                           ],
                         ),
                       ),
