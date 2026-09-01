@@ -169,6 +169,18 @@ class SessionCubit extends Cubit<SessionState> {
     _emitAlarmFromStore();
   }
 
+  /// Mis-tap start — drop the live timer. Does not write history.
+  Future<void> discardActive() async {
+    final a = state.active;
+    if (a == null) return;
+    await Bootstrap.store.remove(StorageKeys.activeSession);
+    emit(state.copyWith(clearActive: true, clearAlarm: true));
+    await LiveActivityService.instance.end();
+    await RemindLogService.instance.cancel();
+    await SessionAlarmService.instance.cancelIfSession(a.id);
+    _emitAlarmFromStore();
+  }
+
   Future<void> clearHistory() async {
     await Bootstrap.store.remove(StorageKeys.sessions);
     await Bootstrap.store.remove(StorageKeys.activeSession);
