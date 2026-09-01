@@ -7,9 +7,12 @@ import 'package:go_router/go_router.dart';
 import 'package:recordo/app/routes.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
+import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
+import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_map.dart';
+import 'package:recordo/features/parks/meter_space.dart';
 import 'package:recordo/features/home/wedge_onboarding.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
@@ -338,7 +341,12 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                       }
                     },
                   ),
-                  SafeArea(
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      bottom: false,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: Row(
@@ -430,6 +438,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                         ],
                       ),
                     ),
+                    ),
                   ),
                   if (catalog.meterSpaces.isNotEmpty)
                     Positioned(
@@ -443,9 +452,53 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                               color: Color(0xFF2FA86B),
                               label: '空置',
                             ),
+                            SizedBox(width: 8),
+                            _MeterLegendDot(
+                              color: Color(0xFFE24B4A),
+                              label: '已使用',
+                            ),
+                            SizedBox(width: 8),
+                            _MeterLegendDot(
+                              color: Color(0xFF8A8A8A),
+                              label: '暫停',
+                            ),
                           ],
                         ),
                       ),
+                    ),
+                  if (_meterId != null)
+                    Builder(
+                      builder: (context) {
+                        MeterSpace? m;
+                        for (final e in catalog.meterSpaces) {
+                          if (e.id == _meterId) {
+                            m = e;
+                            break;
+                          }
+                        }
+                        if (m == null) return const SizedBox.shrink();
+                        return Positioned(
+                          left: 16,
+                          right: 16,
+                          top: MediaQuery.paddingOf(context).top +
+                              (active != null ? 168 : 112),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: MeterCallout(
+                              space: m,
+                              status: catalog.meterOccupancy[m.id]?.status,
+                              onClose: () => setState(() => _meterId = null),
+                              onPay: ParkNavigation.openHkeMeter,
+                              onRoute: () => ParkNavigation.showChooserAt(
+                                context,
+                                lat: m!.lat,
+                                lng: m.lng,
+                                name: '咪錶 ${m.id}',
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   if (active != null)
                     Positioned(
