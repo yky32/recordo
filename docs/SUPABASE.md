@@ -2,7 +2,29 @@
 
 目標：**全港場庫喺 cloud**。App 開一次就 dump 落本機玩；之後只喺 `catalog_meta.version` 新過本機先再 dump。
 
-離線 + outbox 細節：**[SYNC.md](./SYNC.md)**。
+離線 + outbox 細節：**[SYNC.md](./SYNC.md)**。Trust：**[PRICE_TRUST_P0.md](./PRICE_TRUST_P0.md)**。
+
+## Live truth（跟呢度，唔好跟下面過期 Phase 勾選）
+
+Live = **Tokyo `ap-northeast-1`**（`jutuorafntyvukxzehlg`）。**唔係 Singapore。**
+
+| 數據 | 放邊 |
+|------|------|
+| 場庫 + tariff + ev + address + `tdParkId` | Cloud `parks` → `catalog_dump()` |
+| 咪錶街 / 格 | `meters` + `meter_spaces` RPC bbox。**唔入** `parks[]` |
+| 商場空位 | Client `dio` → TD `hk-td-tis_5` overlay。**唔入 dump** |
+| 咪錶佔用 | Client `occupancystatus.csv` TTL 45s。**唔入 dump** |
+| 改名／地區 | `identity_reports` → parks（跳過 operator） |
+| 改價 | `price_reports` → parks |
+| 報新場 | `parks_ugc` → parks |
+| 計時 history | **本機** |
+
+**刻意唔放 client：** `service_role`。  
+**Vacancy 有。** 係運輸署 live overlay，唔係「刻意唔放」。
+
+SQL：`supabase/SETUP_ALL.sql` 一次，再按檔名跑 `supabase/migrations/`。**唔好**只跑 2026-03 UGC + price_note 兩條。
+
+`tdParkId` 手寫（2026-08-31）：**9 行**（利園 I/II/III、希慎、合和、圓方、香港站、九龍站、錦上路）。海港城／時代廣場／K11：**TD 冇場，唔估。** 無 key 先 80m grid（唔 persist）。詳見 **[TD_PARK_ID.md](./TD_PARK_ID.md)**。
 
 ---
 
@@ -48,15 +70,13 @@
 1. 開 https://supabase.com → 登入  
 2. **New project**  
    - Name: `recordo`（任意）  
-   - Region: **Southeast Asia (Singapore)** 較近 HK  
+   - Region: **Northeast Asia (Tokyo)** — live is `ap-northeast-1`. Not Singapore.  
    - Database password: 自己存低（CLI 用）  
 3. 等 project 變綠色 Ready  
 
 ### Step 2 — 跑 SQL（建表）
 1. 左欄 **SQL** → **New query**  
-2. 貼上 repo 入面成份檔內容，**分兩次 Run**：  
-   - 先：`supabase/migrations/20260324000000_recordo_ugc.sql`  
-   - 再：`supabase/migrations/20260825000000_price_note.sql`  
+2. 貼 `supabase/SETUP_ALL.sql`，再按檔名順序跑 `supabase/migrations/` 後加嘅檔。**唔好**只跑 2026-03 UGC + price_note 兩條。  
 3. 成功會見到 Success  
 
 驗證：
@@ -177,7 +197,7 @@ Settings：**雲端 UGC** = 有冇 initialize 成功。
 - Admin dashboard  
 - Realtime subscribe `price_reports`  
 
-**刻意唔放：** vacancy live API、service_role 入 client。OSM 而家 seed 入 `parks`；app bundle 只係後備。
+**刻意唔放 client：** `service_role`。Vacancy **is live**（TD overlay，唔入 dump）。咪錶 dump 已存在。
 
 Seed（GHA 喺 `db push` 之後跑）：
 ```bash
