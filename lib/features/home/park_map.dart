@@ -8,7 +8,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/location/user_location.dart';
-import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/home/map_pins.dart';
 import 'package:recordo/features/home/park_clusters.dart';
@@ -431,15 +430,6 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       return MeterBayStatus.suspended;
     }
 
-    MeterSpace tapBay(List<MeterSpace> bays) {
-      for (final m in bays) {
-        if (widget.meterOccupancy[m.id]?.status == MeterBayStatus.vacant) {
-          return m;
-        }
-      }
-      return bays.first;
-    }
-
     final lat0 = widget.meterSpaces.first.lat;
     final cosLat = math.cos(lat0 * math.pi / 180).clamp(0.25, 1.0);
     final mPerPx = 156543.03392 * cosLat / math.pow(2, z);
@@ -448,7 +438,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     final groups = <String, List<List<MeterSpace>>>{};
     for (final bays in poles.values) {
       final st = statusOf(bays);
-      if (st != MeterBayStatus.vacant) continue;
+      if (st == MeterBayStatus.suspended) continue;
       var lat = 0.0, lng = 0.0;
       for (final m in bays) {
         lat += m.lat;
@@ -490,7 +480,6 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
           lat += rLat * scale * math.sin(a);
           lng += rLng * scale * math.cos(a);
         }
-        final m = tapBay(bays);
         final st = statusOf(bays);
         final pt = LatLng(lat, lng);
         for (final b in bays) {
@@ -501,10 +490,12 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
           width: 44,
           height: 44,
           alignment: Alignment.center,
-          child: MeterBayDot(
-            status: st,
-            selected: bays.any((b) => b.id == widget.selectedMeterId),
-            onTap: () => _onMeterTap(m.id),
+          child: IgnorePointer(
+            child: MeterBayDot(
+              status: st,
+              selected: bays.any((b) => b.id == widget.selectedMeterId),
+              onTap: () {},
+            ),
           ),
         );
         if (st == MeterBayStatus.vacant) {
@@ -517,19 +508,14 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     return [...rest, ...vacant];
   }
 
-  String? _vacantMeterNear(LatLng at, {double maxPx = 32}) {
-    Offset origin;
-    try {
-      origin = _map.camera.latLngToScreenOffset(at);
-    } catch (_) {
-      return null;
-    }
-    String? best;
-    var bestD = maxPx * maxPx;
+  String? _meterNearScreen(Offset origin, {double maxPx = 48}) {
+    String? bestVacant;
+    String? bestAny;
+    var bestVd = maxPx * maxPx;
+    var bestAd = maxPx * maxPx;
     for (final e in widget.meterSpaces) {
-      final st = widget.meterOccupancy[e.id]?.status;
-      if (st != MeterBayStatus.vacant) continue;
-      final pt = _meterShownAt[e.id] ?? LatLng(e.lat, e.lng);
+      final pt = _meterShownAt[e.id];
+      if (pt == null) continue;
       Offset s;
       try {
         s = _map.camera.latLngToScreenOffset(pt);
@@ -539,12 +525,28 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       final dx = s.dx - origin.dx;
       final dy = s.dy - origin.dy;
       final d = dx * dx + dy * dy;
-      if (d <= bestD) {
-        bestD = d;
-        best = e.id;
+      if (d > maxPx * maxPx) continue;
+      if (d <= bestAd) {
+        bestAd = d;
+        bestAny = e.id;
+      }
+      final st = widget.meterOccupancy[e.id]?.status;
+      if (st == MeterBayStatus.vacant && d <= bestVd) {
+        bestVd = d;
+        bestVacant = e.id;
       }
     }
-    return best;
+    return bestVacant ?? bestAny;
+  }
+
+  String? _vacantMeterNear(LatLng at, {double maxPx = 48}) {
+    Offset origin;
+    try {
+      origin = _map.camera.latLngToScreenOffset(at);
+    } catch (_) {
+      return null;
+    }
+    return _meterNearScreen(origin, maxPx: maxPx);
   }
 
   void _onMeterTap(String id) {
@@ -561,66 +563,6 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     if (id == null) return false;
     _onMeterTap(id);
     return true;
-  }
-
-  Widget _meterCalloutOverlay() {
-    final id = widget.selectedMeterId;
-    if (id == null || id.isEmpty) return const SizedBox.shrink();
-    MeterSpace? m;
-    for (final e in widget.meterSpaces) {
-      if (e.id == id) {
-        m = e;
-        break;
-      }
-    }
-    if (m == null) return const SizedBox.shrink();
-    final pt = _meterShownAt[m.id] ?? LatLng(m.lat, m.lng);
-    Offset screen;
-    try {
-      screen = _map.camera.latLngToScreenOffset(pt);
-    } catch (_) {
-      return const SizedBox.shrink();
-    }
-
-    const cardW = 228.0;
-    const cardH = 176.0;
-    final size = MediaQuery.sizeOf(context);
-    final topMin = math.max(8.0, widget.bandTopY.value + 8);
-    var botMax = widget.bandBottomY.value;
-    if (botMax <= topMin + 40) botMax = size.height - 24;
-    botMax -= 8;
-    const leftMin = 8.0;
-    final rightMax = size.width - 8;
-
-    var left = screen.dx + 16;
-    if (left + cardW > rightMax) {
-      left = screen.dx - 16 - cardW;
-    }
-    if (left < leftMin) left = leftMin;
-    if (left + cardW > rightMax) left = rightMax - cardW;
-
-    var top = screen.dy - cardH / 2;
-    final maxTop = math.max(topMin, botMax - cardH);
-    if (top < topMin) top = topMin;
-    if (top > maxTop) top = maxTop;
-
-    return Positioned(
-      left: left,
-      top: top,
-      width: cardW,
-      child: MeterCallout(
-        space: m,
-        status: widget.meterOccupancy[m.id]?.status,
-        onClose: () => widget.onSelectMeter?.call(''),
-        onPay: ParkNavigation.openHkeMeter,
-        onRoute: () => ParkNavigation.showChooserAt(
-          context,
-          lat: m!.lat,
-          lng: m.lng,
-          name: '咪錶 ${m.id}',
-        ),
-      ),
-    );
   }
 
   @override
@@ -702,7 +644,11 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
                 onMapEvent: _onMapEvent,
                 onTap: (tapPosition, point) {
                   widget.onMapInteraction?.call();
-                  _trySelectMeterAt(point);
+                  final rel = tapPosition.relative;
+                  final id = rel != null
+                      ? _meterNearScreen(rel)
+                      : _vacantMeterNear(point);
+                  if (id != null) _onMeterTap(id);
                 },
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
@@ -755,7 +701,6 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
                   ),
               ],
             ),
-            _meterCalloutOverlay(),
           ],
         );
       },
