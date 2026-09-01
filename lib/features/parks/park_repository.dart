@@ -424,9 +424,13 @@ class ParkRepository {
     for (final p in combined) {
       if (seen.add(p.id)) unique.add(p);
     }
-    _ugcView = unique.map(_applyPrices).toList();
+    _ugcView = unique.map(_applyPrices).where((p) => !_hiddenIds().contains(p.id)).toList();
     _byId = {for (final p in _ugcView!) p.id: p};
     return _ugcView!;
+  }
+
+  Set<String> _hiddenIds() {
+    return Bootstrap.store.getJsonList(StorageKeys.hiddenParks).map((e) => '${e['id'] ?? ''}').where((id) => id.isNotEmpty).toSet();
   }
 
   Park? byId(String id) {
@@ -555,7 +559,38 @@ class ParkRepository {
     return !_outbox.read().any((j) => j.id == jobId);
   }
 
-  /// Share a real payment (amount + duration). Never writes hourly median.
+  /// Guideline 1.2 — hide on this device + optional cloud flag.
+  Future<bool> reportContent({
+    required String parkId,
+    required String kind,
+    String note = '',
+    bool hide = true,
+  }) async {
+    if (parkId.trim().isEmpty) throw ArgumentError('缺少場');
+    final k = kind.trim();
+    if (k != 'name' && k != 'price' && k != 'other') {
+      throw ArgumentError('請揀舉報類型');
+    }
+    if (hide) {
+      final list = Bootstrap.store.getJsonList(StorageKeys.hiddenParks);
+      if (!list.any((e) => e['id'] == parkId)) {
+        list.add({'id': parkId});
+        await Bootstrap.store.setJson(StorageKeys.hiddenParks, list);
+      }
+      _invalidateUgcView();
+    }
+    final jobId = 'flag-$parkId-${DateTime.now().millisecondsSinceEpoch}';
+    await _outbox.enqueue(
+      SyncJob(
+        id: jobId,
+        type: 'flag',
+        createdAt: DateTime.now().toUtc(),
+        payload: {'parkId': parkId, 'kind': k, 'note': note.trim()},
+      ),
+    );
+    await _outbox.flush(_remote);
+    return !_outbox.read().any((j) => j.id == jobId);
+  }
   Future<bool> reportPaidSession({
     required String parkId,
     required double amountHkd,

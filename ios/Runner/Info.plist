@@ -67,9 +67,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>顯示你附近嘅停車場同記低泊車位置。</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Show nearby car parks while you use Recordo.</string>
+	<string>Recordo uses your location to find nearby car parks. 用嚟搵附近停車場。</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Remind you when parking time is up, and to log the fee. 泊車計時同記收費提醒。</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>

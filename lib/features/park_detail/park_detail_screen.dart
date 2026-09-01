@@ -108,6 +108,74 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     HapticFeedback.lightImpact();
   }
 
+  Future<void> _report(BuildContext context, Park p) async {
+    var kind = 'name';
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('舉報呢個場', style: RType.titleSm()),
+                    const SizedBox(height: 6),
+                    Text('會喺呢部機隱藏。', style: RType.muted()),
+                    const SizedBox(height: 12),
+                    for (final e in [
+                      ('name', '名稱／地區唔啱'),
+                      ('price', '價錢唔實'),
+                      ('other', '其他'),
+                    ])
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => setLocal(() => kind = e.$1),
+                        leading: Icon(
+                          kind == e.$1
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          size: 20,
+                          color: kind == e.$1
+                              ? UberColors.accent
+                              : UberColors.muted,
+                        ),
+                        title: Text(e.$2, style: RType.body()),
+                      ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('舉報並隱藏'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (ok != true || !context.mounted) return;
+    await context.read<ParkCatalogCubit>().reportContent(
+          parkId: p.id,
+          kind: kind,
+        );
+    HapticFeedback.lightImpact();
+    if (context.mounted) Navigator.pop(context);
+  }
+
   Future<void> _editIdentity(BuildContext context, Park p) async {
     if (!p.canEditIdentity) return;
     final nameCtrl = TextEditingController(text: p.name);
@@ -560,6 +628,15 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                           onPressed: () => _sharePark(context, p),
                           icon: const Icon(Icons.ios_share_rounded, size: 18),
                           label: const Text('分享呢個場'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: TextButton(
+                          onPressed: () => _report(context, p),
+                          child: Text('舉報／隱藏', style: RType.muted()),
                         ),
                       ),
                       const SizedBox(height: 12),
