@@ -518,9 +518,9 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     return [...rest, ...vacant];
   }
 
-  Marker? _meterCallout() {
+  Widget _meterCalloutOverlay() {
     final id = widget.selectedMeterId;
-    if (id == null) return null;
+    if (id == null || id.isEmpty) return const SizedBox.shrink();
     MeterSpace? m;
     for (final e in widget.meterSpaces) {
       if (e.id == id) {
@@ -528,18 +528,47 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
         break;
       }
     }
-    if (m == null) return null;
-    return Marker(
-      point: _meterShownAt[m.id] ?? LatLng(m.lat, m.lng),
-      width: 240,
-      height: 168,
-      alignment: Alignment.centerLeft,
+    if (m == null) return const SizedBox.shrink();
+    final pt = _meterShownAt[m.id] ?? LatLng(m.lat, m.lng);
+    Offset screen;
+    try {
+      screen = _map.camera.latLngToScreenOffset(pt);
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
+
+    const cardW = 228.0;
+    const cardH = 176.0;
+    final size = MediaQuery.sizeOf(context);
+    final topMin = math.max(8.0, widget.bandTopY.value + 8);
+    var botMax = widget.bandBottomY.value;
+    if (botMax <= topMin + 40) botMax = size.height - 24;
+    botMax -= 8;
+    const leftMin = 8.0;
+    final rightMax = size.width - 8;
+
+    var left = screen.dx + 16;
+    if (left + cardW > rightMax) {
+      left = screen.dx - 16 - cardW;
+    }
+    if (left < leftMin) left = leftMin;
+    if (left + cardW > rightMax) left = rightMax - cardW;
+
+    var top = screen.dy - cardH / 2;
+    final maxTop = math.max(topMin, botMax - cardH);
+    if (top < topMin) top = topMin;
+    if (top > maxTop) top = maxTop;
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: cardW,
       child: MeterCallout(
         space: m,
         status: widget.meterOccupancy[m.id]?.status,
         onClose: () => widget.onSelectMeter?.call(''),
         onPay: ParkNavigation.openHkeMeter,
-        onRoute: () => ParkNavigation.openDriving(
+        onRoute: () => ParkNavigation.showChooserAt(
           context,
           lat: m!.lat,
           lng: m.lng,
@@ -597,69 +626,77 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
     }
 
     return ListenableBuilder(
-      listenable: ThemeController.instance,
+      listenable: Listenable.merge([
+        ThemeController.instance,
+        widget.bandTopY,
+        widget.bandBottomY,
+      ]),
       builder: (context, _) {
         final tileUrl = UberColors.mapTileUrl;
-        return FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            initialCenter: _me ?? hkCenter,
-            initialZoom: 15.8,
-            minZoom: 11,
-            maxZoom: 18,
-            backgroundColor: UberColors.mapBlock,
-            onMapEvent: _onMapEvent,
-            onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-            ),
-          ),
+        return Stack(
           children: [
-            TileLayer(
-              key: ValueKey(tileUrl),
-              urlTemplate: tileUrl,
-              fallbackUrl: UberColors.mapTileFallback,
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.recordo',
-              retinaMode: false,
-              maxNativeZoom: UberColors.mapMaxNativeZoom,
-              errorTileCallback: (tile, error, stackTrace) {
-                if (kDebugMode) {
-                  debugPrint('Tile error ${tile.coordinates}: $error');
-                }
-              },
+            FlutterMap(
+              mapController: _map,
+              options: MapOptions(
+                initialCenter: _me ?? hkCenter,
+                initialZoom: 15.8,
+                minZoom: 11,
+                maxZoom: 18,
+                backgroundColor: UberColors.mapBlock,
+                onMapEvent: _onMapEvent,
+                onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
+              ),
+              children: [
+                TileLayer(
+                  key: ValueKey(tileUrl),
+                  urlTemplate: tileUrl,
+                  fallbackUrl: UberColors.mapTileFallback,
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                  userAgentPackageName: 'com.recordo',
+                  retinaMode: false,
+                  maxNativeZoom: UberColors.mapMaxNativeZoom,
+                  errorTileCallback: (tile, error, stackTrace) {
+                    if (kDebugMode) {
+                      debugPrint('Tile error ${tile.coordinates}: $error');
+                    }
+                  },
+                ),
+                if (_me != null)
+                  CircleLayer(
+                    circles: [
+                      CircleMarker(
+                        point: _me!,
+                        radius: _accuracyM,
+                        useRadiusInMeter: true,
+                        color: googleBlue.withValues(alpha: 0.12),
+                        borderStrokeWidth: 1,
+                        borderColor: googleBlue.withValues(alpha: 0.22),
+                      ),
+                    ],
+                  ),
+                MarkerLayer(markers: pinMarkers),
+                MarkerLayer(markers: clusterMarkers),
+                if (selectedMarker != null)
+                  MarkerLayer(markers: [selectedMarker]),
+                MarkerLayer(markers: _meterMarkers()),
+                if (_me != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _me!,
+                        width: 56,
+                        height: 56,
+                        alignment: Alignment.center,
+                        child: const MeLocationDot(),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-            if (_me != null)
-              CircleLayer(
-                circles: [
-                  CircleMarker(
-                    point: _me!,
-                    radius: _accuracyM,
-                    useRadiusInMeter: true,
-                    color: googleBlue.withValues(alpha: 0.12),
-                    borderStrokeWidth: 1,
-                    borderColor: googleBlue.withValues(alpha: 0.22),
-                  ),
-                ],
-              ),
-            MarkerLayer(markers: pinMarkers),
-            MarkerLayer(markers: clusterMarkers),
-            if (selectedMarker != null) MarkerLayer(markers: [selectedMarker]),
-            MarkerLayer(markers: _meterMarkers()),
-            if (_meterCallout() != null)
-              MarkerLayer(markers: [_meterCallout()!]),
-            if (_me != null)
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: _me!,
-                    width: 56,
-                    height: 56,
-                    alignment: Alignment.center,
-                    child: const MeLocationDot(),
-                  ),
-                ],
-              ),
+            _meterCalloutOverlay(),
           ],
         );
       },
