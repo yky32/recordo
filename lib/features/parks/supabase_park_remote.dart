@@ -358,6 +358,25 @@ class SupabaseParkRemote {
       return false;
     }
   }
+
+  Future<bool> insertContentReport({
+    required String parkId,
+    required String kind,
+    String note = '',
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return false;
+    try {
+      await c.from('content_reports').insert({
+        'park_id': parkId,
+        'kind': kind,
+        'note': note,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class RemoteParkPrice {

@@ -1,7 +1,11 @@
 # Recordo
 
-**Free HK parking app** — find car parks, community prices (UGC), slide-to-log fees.  
-**Not a paid product.** Goal: traffic, trust, indie brand. Uber-feel UI (patterns only).
+**Free HK parking app.** Find car parks, community prices, slide-to-log fees.
+
+- **No paywall. No IAP. No subscriptions.**
+- Prices: operator-verified where we have official tariffs; otherwise driver UGC — **not** an official rate API.
+- Vacancy: Transport Department participating parks only.
+- On-street meters: TD open data. Payment is in HKeMeter, not Recordo.
 
 ## Run
 
@@ -11,25 +15,8 @@ flutter pub get
 flutter run
 ```
 
-## Product
-
-See `~/.hermes/wy-limited/products/recordo.md`
-
-## v0.1
-
-- Dark map canvas + seed HK parks
-- Bottom sheet list (Uber density)
-- **Slide to start / end** parking log
-- UGC price confirm / report
-- Local history + month total
-- **No paywall**
-
-## Later
-
-- Google Places pull (API key)
-- Multi-device UGC sync
-- Share cards for growth
-
 ## Bundle
 
-`com.recordo.recordo` · Flutter · yky32
+`com.recordo` (App + Live Activity `com.recordo.RecordoLiveActivity`)
+
+App Store review notes: `docs/ASC_REVIEW_NOTES.md`
