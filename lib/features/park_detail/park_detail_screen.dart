@@ -10,6 +10,7 @@ import 'package:recordo/core/navigation/park_navigation.dart';
 import 'package:recordo/core/supabase/recordo_supabase.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/features/parks/contribution_copy.dart';
+import 'package:recordo/features/parks/hk_districts.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/park_ev.dart';
@@ -105,6 +106,95 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     ];
     await SharePlus.instance.share(ShareParams(text: lines.join('\n')));
     HapticFeedback.lightImpact();
+  }
+
+  Future<void> _editIdentity(BuildContext context, Park p) async {
+    if (!p.canEditIdentity) return;
+    final nameCtrl = TextEditingController(text: p.name);
+    var district = hkDistricts.contains(p.district) ? p.district : '';
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final kb = MediaQuery.viewInsetsOf(ctx).bottom;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + kb),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('改名稱／地區', style: RType.titleSm()),
+                  const SizedBox(height: 6),
+                  Text('OSM 經常叫「地庫停車場」。幫大家改正確。', style: RType.muted()),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: nameCtrl,
+                    style: RType.body(),
+                    maxLength: 40,
+                    decoration: InputDecoration(
+                      hintText: '停車場名稱',
+                      hintStyle: RType.muted(),
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 160,
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final d in hkDistricts)
+                            ChoiceChip(
+                              label: Text(d),
+                              selected: district == d,
+                              onSelected: (_) => setLocal(() => district = d),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('儲存'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      final cloud = await context.read<ParkCatalogCubit>().reportIdentity(
+            parkId: p.id,
+            name: nameCtrl.text,
+            district: district,
+          );
+      HapticFeedback.lightImpact();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(cloud ? '已改 · 會同步去雲' : '已改 · 本機先記低')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'.replaceFirst('ArgumentError: ', ''))),
+      );
+    }
   }
 
   Future<void> _startTimer(BuildContext context, Park p) async {
@@ -260,9 +350,30 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                         ),
                       ),
                       SizedBox(height: 20),
-                      Text(
-                        p.name,
-                        style: RType.display().copyWith(fontSize: 26),
+                      InkWell(
+                        onTap: p.canEditIdentity
+                            ? () => _editIdentity(context, p)
+                            : null,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                p.name,
+                                style: RType.display().copyWith(fontSize: 26),
+                              ),
+                            ),
+                            if (p.canEditIdentity)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6, left: 8),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 20,
+                                  color: UberColors.muted,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(

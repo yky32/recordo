@@ -109,6 +109,9 @@ class Park {
   bool get isOperatorOfficial =>
       isVerifiedPrice && priceProvenance == PriceProvenance.operator;
 
+  /// Public UGC may fix OSM junk names. Official malls stay locked.
+  bool get canEditIdentity => !isOperatorOfficial;
+
   bool get isSeedDemoPrice =>
       hasPrice &&
       !isVerifiedPrice &&
@@ -245,12 +248,14 @@ class Park {
     ParkEv? ev,
     String? address,
     String? tdParkId,
+    String? name,
+    String? district,
     bool clearPriceVerifiedAt = false,
   }) {
     return Park(
       id: id,
-      name: name,
-      district: district,
+      name: name ?? this.name,
+      district: district ?? this.district,
       lat: lat,
       lng: lng,
       hourlyHkd: hourlyHkd ?? this.hourlyHkd,

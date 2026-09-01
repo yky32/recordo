@@ -579,6 +579,21 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     return cloud;
   }
 
+  Future<bool> reportIdentity({
+    required String parkId,
+    required String name,
+    required String district,
+  }) async {
+    final cloud = await _repo.reportIdentity(
+      parkId: parkId,
+      name: name,
+      district: district,
+    );
+    _emitCatalog();
+    select(parkId);
+    return cloud;
+  }
+
   /// Share real payment to community table (not hourly price).
   Future<bool> reportPaidSession({
     required String parkId,
