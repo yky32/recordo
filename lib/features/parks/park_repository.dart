@@ -5,6 +5,7 @@ import 'package:recordo/core/bootstrap.dart';
 import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/features/parks/catalog_cache.dart';
 import 'package:recordo/features/parks/community_paid_session.dart';
+import 'package:recordo/features/parks/hk_districts.dart';
 import 'package:recordo/features/parks/hk_seed_parks.dart';
 import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
@@ -355,6 +356,18 @@ class ParkRepository {
       return p;
     }
 
+    var name = p.name;
+    var district = p.district;
+    final ident = Bootstrap.store.getJsonMap(StorageKeys.ugcIdentity);
+    final identRaw = ident?[p.id];
+    if (identRaw is Map) {
+      final im = Map<String, dynamic>.from(identRaw);
+      final n = '${im['name'] ?? ''}'.trim();
+      final d = '${im['district'] ?? ''}'.trim();
+      if (n.length >= 2) name = n;
+      if (d.length >= 2) district = d;
+    }
+
     if (localRaw is Map) {
       final m = Map<String, dynamic>.from(localRaw);
       final localTs = m['priceUpdatedAt'] != null
@@ -383,6 +396,8 @@ class ParkRepository {
     }
 
     return p.copyWith(
+      name: name,
+      district: district,
       hourlyHkd: hourly,
       dailyHkd: daily,
       nightHkd: night,
@@ -496,6 +511,44 @@ class ParkRepository {
           'unitAmount': ?unitAmount,
           'offpeakAmount': ?offpeakAmount,
         },
+      ),
+    );
+    await _outbox.flush(_remote);
+    return !_outbox.read().any((j) => j.id == jobId);
+  }
+
+  /// Fix OSM junk name / district. Official parks refused.
+  Future<bool> reportIdentity({
+    required String parkId,
+    required String name,
+    required String district,
+  }) async {
+    final p = byId(parkId);
+    if (p == null) throw ArgumentError('找不到呢個場');
+    if (!p.canEditIdentity) throw ArgumentError('官方場唔可以改名');
+    final n = clampParkName(name);
+    final d = clampDistrict(district);
+    if (n == null) throw ArgumentError('名稱要 2–40 字');
+    if (d == null) throw ArgumentError('請揀地區');
+
+    final map = Map<String, dynamic>.from(
+      Bootstrap.store.getJsonMap(StorageKeys.ugcIdentity) ?? {},
+    );
+    map[parkId] = {
+      'name': n,
+      'district': d,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+    };
+    await Bootstrap.store.setJson(StorageKeys.ugcIdentity, map);
+    _invalidateUgcView();
+
+    final jobId = 'ident-$parkId-${DateTime.now().millisecondsSinceEpoch}';
+    await _outbox.enqueue(
+      SyncJob(
+        id: jobId,
+        type: 'identity',
+        createdAt: DateTime.now().toUtc(),
+        payload: {'parkId': parkId, 'name': n, 'district': d},
       ),
     );
     await _outbox.flush(_remote);

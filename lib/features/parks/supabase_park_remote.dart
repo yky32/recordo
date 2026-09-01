@@ -339,6 +339,25 @@ class SupabaseParkRemote {
       return false;
     }
   }
+
+  Future<bool> insertIdentityReport({
+    required String parkId,
+    required String name,
+    required String district,
+  }) async {
+    final c = RecordoSupabase.client;
+    if (c == null) return false;
+    try {
+      await c.from('identity_reports').insert({
+        'park_id': parkId,
+        'name': name,
+        'district': district,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 class RemoteParkPrice {

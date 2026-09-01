@@ -40,6 +40,7 @@ class LocalStore {
 abstract final class StorageKeys {
   static const sessions = 'parking_sessions';
   static const ugcPrices = 'ugc_prices';
+  static const ugcIdentity = 'ugc_identity';
   static const activeSession = 'active_session';
   static const ugcNewParks = 'ugc_new_parks';
   static const syncOutbox = 'sync_outbox';
