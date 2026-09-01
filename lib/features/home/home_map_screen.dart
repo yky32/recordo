@@ -300,6 +300,9 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     onSelectMeter: (id) {
                       hideKeyboard();
                       setState(() => _meterId = id.isEmpty ? null : id);
+                      if (id.isNotEmpty) {
+                        context.read<ParkCatalogCubit>().select(null);
+                      }
                     },
                     onMeterViewport: ({
                       required minLat,

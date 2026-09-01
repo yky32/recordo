@@ -350,7 +350,9 @@ class ParkCatalogCubit extends Cubit<ParkCatalogState> {
     }
   }
 
-  void select(String? id) => emit(state.copyWith(selectedId: id));
+  void select(String? id) => emit(
+        state.copyWith(selectedId: id, clearSelected: id == null),
+      );
 
   /// Map pin tap — re-rank sheet so the pin is row 0, then list can scroll to it.
   void selectFromMap(String id) {
