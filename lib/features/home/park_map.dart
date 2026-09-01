@@ -78,6 +78,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
   AnimationController? _camAnim;
   Timer? _pinDebounce;
   final _meterShownAt = <String, LatLng>{};
+  bool _meterTapLocked = false;
 
   @override
   void initState() {
@@ -503,9 +504,7 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
           child: MeterBayDot(
             status: st,
             selected: bays.any((b) => b.id == widget.selectedMeterId),
-            onTap: () => widget.onSelectMeter?.call(
-              m.id == widget.selectedMeterId ? '' : m.id,
-            ),
+            onTap: () => _onMeterTap(m.id),
           ),
         );
         if (st == MeterBayStatus.vacant) {
@@ -516,6 +515,52 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       }
     }
     return [...rest, ...vacant];
+  }
+
+  String? _vacantMeterNear(LatLng at, {double maxPx = 32}) {
+    Offset origin;
+    try {
+      origin = _map.camera.latLngToScreenOffset(at);
+    } catch (_) {
+      return null;
+    }
+    String? best;
+    var bestD = maxPx * maxPx;
+    for (final e in widget.meterSpaces) {
+      final st = widget.meterOccupancy[e.id]?.status;
+      if (st != MeterBayStatus.vacant) continue;
+      final pt = _meterShownAt[e.id] ?? LatLng(e.lat, e.lng);
+      Offset s;
+      try {
+        s = _map.camera.latLngToScreenOffset(pt);
+      } catch (_) {
+        continue;
+      }
+      final dx = s.dx - origin.dx;
+      final dy = s.dy - origin.dy;
+      final d = dx * dx + dy * dy;
+      if (d <= bestD) {
+        bestD = d;
+        best = e.id;
+      }
+    }
+    return best;
+  }
+
+  void _onMeterTap(String id) {
+    if (_meterTapLocked) return;
+    _meterTapLocked = true;
+    widget.onSelectMeter?.call(id == widget.selectedMeterId ? '' : id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _meterTapLocked = false;
+    });
+  }
+
+  bool _trySelectMeterAt(LatLng at) {
+    final id = _vacantMeterNear(at);
+    if (id == null) return false;
+    _onMeterTap(id);
+    return true;
   }
 
   Widget _meterCalloutOverlay() {
@@ -595,7 +640,10 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
             alignment: Alignment.center,
             child: ParkClusterChip(
               count: c.parks.length,
-              onTap: () => _onClusterTap(c),
+              onTap: () {
+                if (_trySelectMeterAt(c.center)) return;
+                _onClusterTap(c);
+              },
             ),
           ),
         );
@@ -614,9 +662,17 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
             ? ParkPriceChip(
                 park: p,
                 selected: selected,
-                onTap: () => widget.onSelect?.call(p.id),
+                onTap: () {
+                  if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
+                  widget.onSelect?.call(p.id);
+                },
               )
-            : ParkDot(onTap: () => widget.onSelect?.call(p.id)),
+            : ParkDot(
+                onTap: () {
+                  if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
+                  widget.onSelect?.call(p.id);
+                },
+              ),
       );
       if (selected) {
         selectedMarker = marker;
@@ -644,7 +700,10 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
                 maxZoom: 18,
                 backgroundColor: UberColors.mapBlock,
                 onMapEvent: _onMapEvent,
-                onTap: (tapPosition, point) => widget.onMapInteraction?.call(),
+                onTap: (tapPosition, point) {
+                  widget.onMapInteraction?.call();
+                  _trySelectMeterAt(point);
+                },
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
