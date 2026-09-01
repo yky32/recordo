@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:recordo/core/config/recordo_config.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 
 /// Uber-adjacent palette. Values follow [ThemeController] (dark default).
@@ -65,14 +66,21 @@ abstract final class UberColors {
   static Color get ctaOnFill =>
       _dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 
-  /// Raster basemap — no vendor API key (CARTO watermarks "API KEY REQUIRED").
-  /// Dark: Esri World Dark Gray (native max **16** — z17+ is a JPEG that says
-  /// "Map data not yet available"). Light: OSM.
-  static String get mapTileUrl => _dark
-      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
-      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  /// Dark: Mapbox Dark v11 when `MAPBOX_PK` is set; else Esri z16.
+  /// Light: OSM. Never CARTO.
+  static String get mapTileUrl {
+    if (!_dark) return mapTileFallback;
+    if (RecordoConfig.mapboxEnabled) {
+      final pk = Uri.encodeQueryComponent(RecordoConfig.mapboxPk);
+      return 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=$pk';
+    }
+    return 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  }
 
-  static int get mapMaxNativeZoom => _dark ? 16 : 19;
+  static int get mapMaxNativeZoom {
+    if (!_dark) return 19;
+    return RecordoConfig.mapboxEnabled ? 18 : 16;
+  }
 
   static const mapTileFallback =
       'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
