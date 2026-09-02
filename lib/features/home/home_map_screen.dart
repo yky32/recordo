@@ -8,6 +8,7 @@ import 'package:recordo/app/routes.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/core/navigation/park_navigation.dart';
+import 'package:recordo/core/storage/local_store.dart';
 import 'package:recordo/core/theme/theme_controller.dart';
 import 'package:recordo/core/widgets/slide_to_unlock.dart';
 import 'package:recordo/features/home/map_pins.dart';
@@ -18,6 +19,7 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/end_session_sheet.dart';
 import 'package:recordo/features/session/session_cubit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeMapScreen extends StatefulWidget {
   const HomeMapScreen({super.key});
@@ -42,6 +44,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   final _bandBottomY = ValueNotifier<double>(500);
   bool _locating = false;
   String? _meterId;
+  bool _showMeters = true;
   AnimationController? _sheetAnim;
 
   static const _sheetMin = 0.28;
@@ -52,10 +55,29 @@ class _HomeMapScreenState extends State<HomeMapScreen>
   @override
   void initState() {
     super.initState();
+    _hydrateMeterPref();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _measureChrome();
       if (mounted) showWedgeExplainerIfNeeded(context);
     });
+  }
+
+  Future<void> _hydrateMeterPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    final on = prefs.getBool(StorageKeys.prefShowMeters) ?? true;
+    if (!mounted) return;
+    setState(() => _showMeters = on);
+  }
+
+  Future<void> _toggleMeters() async {
+    HapticFeedback.selectionClick();
+    final next = !_showMeters;
+    setState(() {
+      _showMeters = next;
+      if (!next) _meterId = null;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(StorageKeys.prefShowMeters, next);
   }
 
   void _setSheetExtent(double value, double min) {
@@ -289,7 +311,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                   ParkMap(
                     key: _mapKey,
                     parks: catalog.allWindowParks,
-                    meterSpaces: catalog.meterSpaces,
+                    meterSpaces: _showMeters ? catalog.meterSpaces : const [],
                     meterOccupancy: catalog.meterOccupancy,
                     selectedId: catalog.selectedId,
                     selectedMeterId: _meterId,
@@ -314,6 +336,7 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                       required maxLng,
                       required zoom,
                     }) {
+                      if (!_showMeters) return;
                       context.read<ParkCatalogCubit>().onMeterViewport(
                             minLat: minLat,
                             minLng: minLng,
@@ -440,33 +463,16 @@ class _HomeMapScreenState extends State<HomeMapScreen>
                     ),
                     ),
                   ),
-                  if (catalog.meterSpaces.isNotEmpty)
-                    Positioned(
-                      top: MediaQuery.paddingOf(context).top +
-                          (active != null ? 128 : 64),
-                      left: 12,
-                      child: IgnorePointer(
-                        child: Row(
-                          children: const [
-                            _MeterLegendDot(
-                              color: Color(0xFF2FA86B),
-                              label: '空置',
-                            ),
-                            SizedBox(width: 8),
-                            _MeterLegendDot(
-                              color: Color(0xFFE24B4A),
-                              label: '已使用',
-                            ),
-                            SizedBox(width: 8),
-                            _MeterLegendDot(
-                              color: Color(0xFF8A8A8A),
-                              label: '暫停',
-                            ),
-                          ],
-                        ),
-                      ),
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top +
+                        (active != null ? 128 : 64),
+                    left: 12,
+                    child: _MeterLayerToggle(
+                      on: _showMeters,
+                      onTap: _toggleMeters,
                     ),
-                  if (_meterId != null)
+                  ),
+                  if (_showMeters && _meterId != null)
                     Builder(
                       builder: (context) {
                         MeterSpace? m;
@@ -945,30 +951,60 @@ class _LiveSessionTickerState extends State<_LiveSessionTicker> {
   }
 }
 
-class _MeterLegendDot extends StatelessWidget {
-  const _MeterLegendDot({required this.color, required this.label});
-  final Color color;
-  final String label;
+class _MeterLayerToggle extends StatelessWidget {
+  const _MeterLayerToggle({required this.on, required this.onTap});
+  final bool on;
+  final VoidCallback onTap;
+
+  static Widget _swatch(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: RType.muted()),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: UberColors.sheet.withValues(alpha: 0.9),
+    return Material(
+      color: UberColors.sheet.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(99),
+      child: InkWell(
         borderRadius: BorderRadius.circular(99),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.pin_drop_rounded,
+                size: 16,
+                color: on ? UberColors.accent : UberColors.muted,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '咪錶',
+                style: on ? RType.label() : RType.muted(),
+              ),
+              if (on) ...[
+                const SizedBox(width: 8),
+                _swatch(const Color(0xFF2FA86B), '空置'),
+                const SizedBox(width: 6),
+                _swatch(const Color(0xFFE24B4A), '已使用'),
+                const SizedBox(width: 6),
+                _swatch(const Color(0xFF8A8A8A), '暫停'),
+              ],
+            ],
           ),
-          const SizedBox(width: 5),
-          Text(label, style: RType.muted()),
-        ],
+        ),
       ),
     );
   }
