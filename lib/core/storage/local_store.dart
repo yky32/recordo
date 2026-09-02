@@ -53,4 +53,5 @@ abstract final class StorageKeys {
   static const sessionAlarmSessionId = 'session_alarm_session_id';
   static const cohortInstallId = 'cohort_install_id';
   static const hiddenParks = 'hidden_parks';
+  static const prefShowMeters = 'pref_show_meters';
 }
