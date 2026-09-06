@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
@@ -15,6 +16,7 @@ import 'package:recordo/features/parks/park.dart';
 import 'package:recordo/features/parks/park_tariff.dart';
 import 'package:recordo/features/parks/park_ev.dart';
 import 'package:recordo/features/parks/price_guard.dart';
+import 'package:recordo/features/parks/sign_ocr.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
 import 'package:recordo/features/session/session_cubit.dart';
 import 'package:share_plus/share_plus.dart';
@@ -31,6 +33,7 @@ class ParkDetailScreen extends StatefulWidget {
 
 class _ParkDetailScreenState extends State<ParkDetailScreen> {
   bool _editing = false;
+  bool _ocrBusy = false;
   int _unitMinutes = 60;
   final _hourly = TextEditingController();
   final _daily = TextEditingController();
@@ -355,6 +358,157 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
     }
   }
 
+  Future<void> _scanSign(BuildContext context, Park p) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('影收費牌'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('由相簿上載'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (source == null || !context.mounted) return;
+
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1920,
+    );
+    if (file == null || !context.mounted) return;
+
+    setState(() => _ocrBusy = true);
+    try {
+      final raw = await SignOcr.recognizeFile(file.path);
+      if (!context.mounted) return;
+      final guess = SignOcr.parse(raw);
+      await _confirmSignGuess(context, p, guess);
+    } on PlatformException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? '讀唔到收費牌')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _ocrBusy = false);
+    }
+  }
+
+  Future<void> _confirmSignGuess(
+    BuildContext context,
+    Park p,
+    SignOcrGuess guess,
+  ) async {
+    final hourlyCtl = TextEditingController(
+      text: guess.hourly?.toStringAsFixed(0) ?? '',
+    );
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final official = p.isOperatorOfficial;
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            20 + MediaQuery.viewInsetsOf(ctx).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('司機建議價', style: RType.titleSm()),
+              const SizedBox(height: 6),
+              Text(
+                official
+                    ? '官方牌唔會用相片覆蓋。讀到嘅數字只供你參考。'
+                    : '唔當官方。確認之後先寫入本機建議價，相唔會上傳。',
+                style: RType.muted(),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: hourlyCtl,
+                enabled: !official,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '時租 HKD',
+                  prefixText: r'$',
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: official
+                    ? () => Navigator.pop(ctx, false)
+                    : () => Navigator.pop(ctx, true),
+                child: Text(official ? '知道' : '確認建議'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    final hourlyText = hourlyCtl.text;
+    hourlyCtl.dispose();
+    if (ok != true || !context.mounted) return;
+    if (p.isOperatorOfficial) return;
+
+    final hourly = PriceGuard.clampHourly(double.tryParse(hourlyText));
+    if (hourly == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('讀唔到時租，請改數字後再確認')),
+      );
+      return;
+    }
+    try {
+      final cloud = await context.read<ParkCatalogCubit>().reportPrice(
+            parkId: p.id,
+            hourly: hourly,
+            unitMinutes: 60,
+            unitAmount: hourly,
+            tariff: driverTariff(unitMinutes: 60, peak: hourly),
+          );
+      HapticFeedback.mediumImpact();
+      if (context.mounted) {
+        final updated = context.read<ParkCatalogCubit>().parkById(p.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ContributionCopy.priceReport(cloud: cloud, park: updated),
+            ),
+          ),
+        );
+      }
+    } on ArgumentError catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message?.toString() ?? '價錢無效')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
@@ -395,6 +549,25 @@ class _ParkDetailScreenState extends State<ParkDetailScreen> {
                 ),
                 centerTitle: true,
                 title: Text('場詳情', style: RType.titleSm()),
+                actions: [
+                  if (_ocrBusy)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 16),
+                      child: Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      tooltip: '影收費牌',
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      onPressed: () => _scanSign(context, p),
+                    ),
+                ],
               ),
               sliverToBox(
                 child: Padding(
