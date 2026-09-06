@@ -5,7 +5,7 @@
 Recordo is a **free** Hong Kong parking helper. No in-app purchases.
 
 **User-generated content (Guideline 1.2)**  
-Drivers may update a park’s **name, district, and hourly price**. Operator-official parks cannot have identity overwritten. Users can **Report** inaccurate name/price and **Hide** a park on-device. Reports land in `content_reports`.
+Drivers may update a park’s **name, district, and hourly price**. A camera shortcut can read a fee sign on-device; the driver must confirm. That is a **suggestion**, not official. Operator-official parks cannot have identity or tariff overwritten. Photos are not uploaded. Users can **Report** inaccurate name/price and **Hide** a park on-device. Reports land in `content_reports`.
 
 **Location**  
 When In Use only — to find nearby car parks.
