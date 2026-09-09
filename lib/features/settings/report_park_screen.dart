@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:recordo/app/theme/recordo_theme.dart';
 import 'package:recordo/app/theme/uber_colors.dart';
 import 'package:recordo/features/parks/park_catalog_cubit.dart';
+import 'package:recordo/features/parks/price_guard.dart';
+import 'package:recordo/features/parks/sign_ocr.dart';
 
 /// UGC: report a new car park (name, place, fees, height).
 class ReportParkScreen extends StatefulWidget {
@@ -24,6 +27,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
   final _note = TextEditingController();
   bool _useMyLocation = true;
   bool _submitting = false;
+  bool _ocrBusy = false;
   String? _locLabel;
 
   @override
@@ -118,6 +122,120 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _scanSign() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('影收費牌'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('由相簿上載'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (source == null || !mounted) return;
+
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1920,
+    );
+    if (file == null || !mounted) return;
+
+    setState(() => _ocrBusy = true);
+    try {
+      final raw = await SignOcr.recognizeFile(file.path);
+      if (!mounted) return;
+      final guess = SignOcr.parse(raw);
+      await _confirmHourly(guess);
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? '讀唔到收費牌')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _ocrBusy = false);
+    }
+  }
+
+  Future<void> _confirmHourly(SignOcrGuess guess) async {
+    final hourlyCtl = TextEditingController(
+      text: guess.hourly?.toStringAsFixed(0) ?? '',
+    );
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: UberColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            20 + MediaQuery.viewInsetsOf(ctx).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('預填時租', style: RType.titleSm()),
+              const SizedBox(height: 6),
+              Text(
+                '唔當官方。確認之後先寫入時租，名稱同座標你自己填。相唔會上傳。',
+                style: RType.muted(),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: hourlyCtl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '時租 HKD',
+                  prefixText: r'$',
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('確認預填'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    final hourlyText = hourlyCtl.text;
+    hourlyCtl.dispose();
+    if (ok != true || !mounted) return;
+    final hourly = PriceGuard.clampHourly(double.tryParse(hourlyText));
+    if (hourly == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('讀唔到時租 · 可以手填')),
+      );
+      return;
+    }
+    setState(() => _hourly.text = hourly.toStringAsFixed(0));
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
@@ -132,6 +250,19 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
         ),
         centerTitle: true,
         title: Text('報告新停車場', style: RType.titleSm()),
+        actions: [
+          IconButton(
+            tooltip: '影收費牌預填時租',
+            onPressed: _ocrBusy ? null : _scanSign,
+            icon: _ocrBusy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.photo_camera_outlined),
+          ),
+        ],
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + bottom),
@@ -183,7 +314,7 @@ class _ReportParkScreenState extends State<ReportParkScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          _label('收費（可空 · 知就填）'),
+          _label('收費（可空 · 知就填 · 可影牌預填時租）'),
           _field(_hourly, '時租 HK\$', keyboard: TextInputType.number),
           const SizedBox(height: 10),
           _field(_daily, '日泊 HK\$', keyboard: TextInputType.number),
