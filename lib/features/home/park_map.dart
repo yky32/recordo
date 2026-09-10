@@ -597,24 +597,27 @@ class ParkMapState extends State<ParkMap> with TickerProviderStateMixin {
       final marker = Marker(
         point: LatLng(p.lat, p.lng),
         width: selected ? 160 : (showChip ? (p.hasEvCharging ? 86 : 72) : 32),
-        height: selected ? 78 : (showChip ? 36 : 32),
+        height: selected ? 88 : (showChip ? 40 : 32),
         alignment:
             showChip || selected ? Alignment.bottomCenter : Alignment.center,
-        child: showChip
-            ? ParkPriceChip(
-                park: p,
-                selected: selected,
-                onTap: () {
-                  if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
-                  widget.onSelect?.call(p.id);
-                },
-              )
-            : ParkDot(
-                onTap: () {
-                  if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
-                  widget.onSelect?.call(p.id);
-                },
-              ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: showChip
+              ? ParkPriceChip(
+                  park: p,
+                  selected: selected,
+                  onTap: () {
+                    if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
+                    widget.onSelect?.call(p.id);
+                  },
+                )
+              : ParkDot(
+                  onTap: () {
+                    if (_trySelectMeterAt(LatLng(p.lat, p.lng))) return;
+                    widget.onSelect?.call(p.id);
+                  },
+                ),
+        ),
       );
       if (selected) {
         selectedMarker = marker;
