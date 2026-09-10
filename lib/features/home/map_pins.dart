@@ -150,33 +150,35 @@ class ParkPriceChip extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (selected)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Material(
-                color: UberColors.sheet,
-                elevation: 6,
-                shadowColor: Colors.black54,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 140),
-                    child: Text(
-                      park.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: UberColors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
+          if (selected) ...[
+            Material(
+              color: UberColors.sheet,
+              elevation: 6,
+              shadowColor: Colors.black54,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Text(
+                    park.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: UberColors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
             ),
+            CustomPaint(
+              size: const Size(16, 8),
+              painter: _ChipPointerPainter(fill, up: true),
+            ),
+          ],
           Container(
             padding: EdgeInsets.symmetric(
               horizontal: selected ? 9 : 7,
@@ -216,10 +218,11 @@ class ParkPriceChip extends StatelessWidget {
               ],
             ),
           ),
-          CustomPaint(
-            size: selected ? const Size(16, 11) : const Size(10, 6),
-            painter: _ChipPointerPainter(fill),
-          ),
+          if (!selected)
+            CustomPaint(
+              size: const Size(10, 6),
+              painter: _ChipPointerPainter(fill),
+            ),
         ],
       ),
     );
@@ -504,19 +507,30 @@ class MeterCallout extends StatelessWidget {
 }
 
 class _ChipPointerPainter extends CustomPainter {
-  _ChipPointerPainter(this.color);
+  _ChipPointerPainter(this.color, {this.up = false});
   final Color color;
+  final bool up;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
+    final path = Path();
+    if (up) {
+      path
+        ..moveTo(0, size.height)
+        ..lineTo(size.width / 2, 0)
+        ..lineTo(size.width, size.height)
+        ..close();
+    } else {
+      path
+        ..moveTo(0, 0)
+        ..lineTo(size.width / 2, size.height)
+        ..lineTo(size.width, 0)
+        ..close();
+    }
     canvas.drawPath(path, Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(covariant _ChipPointerPainter old) => old.color != color;
+  bool shouldRepaint(covariant _ChipPointerPainter old) =>
+      old.color != color || old.up != up;
 }
