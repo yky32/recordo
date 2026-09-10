@@ -217,7 +217,7 @@ class ParkPriceChip extends StatelessWidget {
             ),
           ),
           CustomPaint(
-            size: const Size(10, 6),
+            size: selected ? const Size(16, 11) : const Size(10, 6),
             painter: _ChipPointerPainter(fill),
           ),
         ],
